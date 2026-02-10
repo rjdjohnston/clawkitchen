@@ -18,6 +18,13 @@ type ReqBody =
       overwrite?: boolean;
     };
 
+const asString = (v: unknown) => {
+  if (typeof v === "string") return v;
+  if (v instanceof Uint8Array) return new TextDecoder().decode(v);
+  if (v && typeof (v as { toString?: unknown }).toString === "function") return String(v);
+  return "";
+};
+
 export async function POST(req: Request) {
   const body = (await req.json()) as ReqBody;
 
@@ -36,14 +43,15 @@ export async function POST(req: Request) {
   try {
     const { stdout, stderr } = await runOpenClaw(args);
     return NextResponse.json({ ok: true, args, stdout, stderr });
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const err = e as { message?: string; stdout?: unknown; stderr?: unknown };
     return NextResponse.json(
       {
         ok: false,
         args,
-        error: e?.message ?? String(e),
-        stdout: e?.stdout?.toString?.() ?? "",
-        stderr: e?.stderr?.toString?.() ?? "",
+        error: err?.message ?? String(e),
+        stdout: asString(err?.stdout),
+        stderr: asString(err?.stderr),
       },
       { status: 500 }
     );
