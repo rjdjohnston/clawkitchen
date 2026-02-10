@@ -10,7 +10,7 @@ export async function GET() {
   let data: unknown;
   try {
     data = JSON.parse(stdout);
-  } catch (e) {
+  } catch {
     return NextResponse.json(
       { error: "Failed to parse openclaw recipes list output", stderr, stdout },
       { status: 500 }

@@ -1,8 +1,47 @@
 @import "tailwindcss";
 
+/*
+  Claw Kitchen UI tokens
+  Goal: macOS Mission Control vibe — dark neutral base, frosted glass surfaces,
+  subtle depth, and system-red accents.
+*/
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Base colors */
+  --ck-bg-base: #0b0c10;
+  --ck-bg-glass: rgba(24, 25, 31, 0.72);
+  --ck-bg-glass-strong: rgba(24, 25, 31, 0.88);
+
+  --ck-border-subtle: rgba(255, 255, 255, 0.10);
+  --ck-border-strong: rgba(255, 255, 255, 0.16);
+
+  --ck-text-primary: rgba(255, 255, 255, 0.92);
+  --ck-text-secondary: rgba(255, 255, 255, 0.66);
+  --ck-text-tertiary: rgba(255, 255, 255, 0.50);
+
+  /* Accent (macOS-ish system red) */
+  --ck-accent-red: #ff3b30;
+  --ck-accent-red-hover: #ff5a52;
+  --ck-accent-red-active: #e6372d;
+
+  /* Focus ring (visible on glass) */
+  --ck-focus-ring: rgba(255, 59, 48, 0.70);
+
+  /* Radii */
+  --ck-radius-sm: 10px;
+  --ck-radius-md: 14px;
+  --ck-radius-lg: 18px;
+
+  /* Elevation */
+  --ck-shadow-1: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --ck-shadow-2: 0 18px 50px rgba(0, 0, 0, 0.45);
+
+  /* Glass */
+  --ck-glass-blur: 18px;
+  --ck-glass-saturation: 1.25;
+
+  /* Legacy mappings (Next starter defaults) */
+  --background: var(--ck-bg-base);
+  --foreground: var(--ck-text-primary);
 }
 
 @theme inline {
@@ -12,15 +51,64 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--ck-bg-base);
+  color: var(--ck-text-primary);
+  font-family: var(--font-geist-sans), system-ui, -apple-system, Segoe UI, Roboto,
+    Arial, Helvetica, sans-serif;
+}
+
+/* Wallpaper-like backdrop (kept subtle; readability first) */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(1200px 700px at 20% 15%, rgba(255, 59, 48, 0.14), transparent 60%),
+    radial-gradient(900px 600px at 75% 25%, rgba(255, 255, 255, 0.08), transparent 55%),
+    radial-gradient(1100px 700px at 55% 80%, rgba(120, 140, 255, 0.10), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0));
+}
+
+/* Universal focus ring: ensures keyboard nav remains obvious on glass. */
+:where(a, button, input, textarea, select, summary, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--ck-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Glass surface utility classes (fallback-first) */
+.ck-glass {
+  background: var(--ck-bg-glass);
+  border: 1px solid var(--ck-border-subtle);
+  border-radius: var(--ck-radius-md);
+  box-shadow: var(--ck-shadow-1);
+  transition: background-color 160ms ease-out, box-shadow 180ms ease-out, border-color 160ms ease-out;
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .ck-glass {
+    -webkit-backdrop-filter: blur(var(--ck-glass-blur)) saturate(var(--ck-glass-saturation));
+    backdrop-filter: blur(var(--ck-glass-blur)) saturate(var(--ck-glass-saturation));
+  }
+}
+
+.ck-glass-strong {
+  background: var(--ck-bg-glass-strong);
+  border: 1px solid var(--ck-border-strong);
+  border-radius: var(--ck-radius-md);
+  box-shadow: var(--ck-shadow-2);
+  transition: background-color 160ms ease-out, box-shadow 180ms ease-out, border-color 160ms ease-out;
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .ck-glass-strong {
+    -webkit-backdrop-filter: blur(calc(var(--ck-glass-blur) + 4px)) saturate(var(--ck-glass-saturation));
+    backdrop-filter: blur(calc(var(--ck-glass-blur) + 4px)) saturate(var(--ck-glass-saturation));
+  }
 }
