@@ -26,7 +26,7 @@ const asString = (v: unknown) => {
 };
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as ReqBody;
+  const body = (await req.json()) as ReqBody & { cronInstallChoice?: "yes" | "no" };
 
   const args: string[] = ["recipes", body.kind === "team" ? "scaffold-team" : "scaffold", body.recipeId];
 
@@ -40,7 +40,20 @@ export async function POST(req: Request) {
     if (body.teamId) args.push("--team-id", body.teamId);
   }
 
+  // Kitchen runs scaffold non-interactively, so the recipes plugin cannot prompt.
+  // To emulate prompt semantics, we optionally override cronInstallation for this one scaffold run.
+  let prevCronInstallation: string | null = null;
+  const override = body.cronInstallChoice;
+
   try {
+    if (override === "yes" || override === "no") {
+      const cfgPath = "plugins.entries.recipes.config.cronInstallation";
+      const prev = await runOpenClaw(["config", "get", cfgPath]);
+      prevCronInstallation = prev.stdout.trim() || null;
+      const next = override === "yes" ? "on" : "off";
+      await runOpenClaw(["config", "set", cfgPath, next]);
+    }
+
     const { stdout, stderr } = await runOpenClaw(args);
     return NextResponse.json({ ok: true, args, stdout, stderr });
   } catch (e: unknown) {
@@ -55,5 +68,14 @@ export async function POST(req: Request) {
       },
       { status: 500 }
     );
+  } finally {
+    if (prevCronInstallation !== null) {
+      try {
+        await runOpenClaw(["config", "set", "plugins.entries.recipes.config.cronInstallation", prevCronInstallation]);
+      } catch {
+        // best-effort restore
+      }
+    }
   }
 }
+
