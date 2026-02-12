@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "generatedAt": "2026-02-12T23:35:00Z",
+  "recipes": [
+    {
+      "slug": "development-team",
+      "kind": "team",
+      "name": "Development Team",
+      "description": "Lead + dev + devops + test. File-first lanes and optional cron loops.",
+      "version": "0.1.0",
+      "tags": ["team", "engineering", "qa", "file-first"],
+      "sourceUrl": "https://raw.githubusercontent.com/rjdjohnston/clawcipes/main/recipes/default/development-team.md",
+      "homepageUrl": "https://github.com/rjdjohnston/clawcipes"
+    },
+    {
+      "slug": "product-team",
+      "kind": "team",
+      "name": "Product Team",
+      "description": "PM/Design/Engineering/QA delivery loop with a shared workspace.",
+      "version": "0.1.0",
+      "tags": ["team", "product"],
+      "sourceUrl": "https://raw.githubusercontent.com/rjdjohnston/clawcipes/main/recipes/default/product-team.md",
+      "homepageUrl": "https://github.com/rjdjohnston/clawcipes"
+    },
+    {
+      "slug": "research-team",
+      "kind": "team",
+      "name": "Research Team",
+      "description": "Citations-first research pipeline: sources → notes → briefs.",
+      "version": "0.1.0",
+      "tags": ["team", "research"],
+      "sourceUrl": "https://raw.githubusercontent.com/rjdjohnston/clawcipes/main/recipes/default/research-team.md",
+      "homepageUrl": "https://github.com/rjdjohnston/clawcipes"
+    },
+    {
+      "slug": "writing-team",
+      "kind": "team",
+      "name": "Writing Team",
+      "description": "Briefs → outlines → drafts → review/edit (testing) → done.",
+      "version": "0.1.0",
+      "tags": ["team", "writing"],
+      "sourceUrl": "https://raw.githubusercontent.com/rjdjohnston/clawcipes/main/recipes/default/writing-team.md",
+      "homepageUrl": "https://github.com/rjdjohnston/clawcipes"
+    },
+    {
+      "slug": "social-team",
+      "kind": "team",
+      "name": "Social Team",
+      "description": "Draft → approval/review (testing) → schedule/publish.",
+      "version": "0.1.0",
+      "tags": ["team", "social"],
+      "sourceUrl": "https://raw.githubusercontent.com/rjdjohnston/clawcipes/main/recipes/default/social-team.md",
+      "homepageUrl": "https://github.com/rjdjohnston/clawcipes"
+    },
+    {
+      "slug": "customer-support-team",
+      "kind": "team",
+      "name": "Customer Support Team",
+      "description": "Triage → resolve → verification (testing) → done/outbox.",
+      "version": "0.1.0",
+      "tags": ["team", "support"],
+      "sourceUrl": "https://raw.githubusercontent.com/rjdjohnston/clawcipes/main/recipes/default/customer-support-team.md",
+      "homepageUrl": "https://github.com/rjdjohnston/clawcipes"
+    }
+  ]
+}
