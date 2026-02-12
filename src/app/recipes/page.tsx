@@ -51,25 +51,23 @@ export default async function RecipesPage() {
   const workspace = recipes.filter((r) => r.source === "workspace");
 
   return (
-    <main className="min-h-screen p-8">
-      <div className="ck-glass mx-auto max-w-4xl p-6 sm:p-8">
-        <div className="flex items-baseline justify-between gap-4">
-          <h1 className="text-2xl font-semibold tracking-tight">Recipes</h1>
-          <Link
-            href="/"
-            className="text-sm font-medium text-[color:var(--ck-text-secondary)] transition-colors hover:text-[color:var(--ck-text-primary)]"
-          >
-            Home
-          </Link>
-        </div>
-
-        <RecipesSection title={`Builtin (${builtin.length})`} items={builtin} />
-        <RecipesSection title={`Workspace (${workspace.length})`} items={workspace} />
-
-        <p className="mt-10 text-xs text-[color:var(--ck-text-tertiary)]">
-          Note: editing builtin recipes will modify the recipes plugin install path on this machine.
-        </p>
+    <div className="ck-glass mx-auto max-w-4xl p-6 sm:p-8">
+      <div className="flex items-baseline justify-between gap-4">
+        <h1 className="text-2xl font-semibold tracking-tight">Recipes</h1>
+        <Link
+          href="/"
+          className="text-sm font-medium text-[color:var(--ck-text-secondary)] transition-colors hover:text-[color:var(--ck-text-primary)]"
+        >
+          Home
+        </Link>
       </div>
-    </main>
+
+      <RecipesSection title={`Builtin (${builtin.length})`} items={builtin} />
+      <RecipesSection title={`Workspace (${workspace.length})`} items={workspace} />
+
+      <p className="mt-10 text-xs text-[color:var(--ck-text-tertiary)]">
+        Note: editing builtin recipes will modify the recipes plugin install path on this machine.
+      </p>
+    </div>
   );
 }
