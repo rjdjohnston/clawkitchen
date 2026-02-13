@@ -21,6 +21,8 @@ export default function AgentEditor({ agentId }: { agentId: string }) {
   const [theme, setTheme] = useState<string>("");
   const [avatar, setAvatar] = useState<string>("");
 
+  const [saveAsNewId, setSaveAsNewId] = useState<string>("");
+
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -50,8 +52,30 @@ export default function AgentEditor({ agentId }: { agentId: string }) {
         body: JSON.stringify({ agentId, name, emoji, theme, avatar }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Save failed");
+      if (!res.ok) throw new Error(json.message || json.error || "Save failed");
       setMessage("Saved identity via openclaw agents set-identity");
+    } catch (e: unknown) {
+      setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onSaveAsNew() {
+    const newAgentId = saveAsNewId.trim();
+    if (!newAgentId) return setMessage("New agent id is required");
+
+    setSaving(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/agents/add", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ newAgentId, name, emoji, theme, avatar, model: agent.model }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || json.error || "Save As New failed");
+      setMessage(`Created new agent: ${newAgentId}`);
     } catch (e: unknown) {
       setMessage(e instanceof Error ? e.message : String(e));
     } finally {
@@ -115,7 +139,17 @@ export default function AgentEditor({ agentId }: { agentId: string }) {
             </div>
           </div>
 
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <label className="mt-4 block text-xs font-medium text-[color:var(--ck-text-secondary)]">
+            Save As New (new agent id)
+          </label>
+          <input
+            value={saveAsNewId}
+            onChange={(e) => setSaveAsNewId(e.target.value)}
+            placeholder={`${agentId}-copy`}
+            className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
+          />
+
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <button
               disabled={saving}
               onClick={onSave}
@@ -125,11 +159,11 @@ export default function AgentEditor({ agentId }: { agentId: string }) {
             </button>
 
             <button
-              disabled
-              className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] opacity-50"
-              title="Not implemented yet"
+              disabled={saving}
+              onClick={onSaveAsNew}
+              className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-white/10 active:bg-white/15 disabled:opacity-50"
             >
-              Save As New
+              {saving ? "Saving…" : "Save As New"}
             </button>
           </div>
         </div>
