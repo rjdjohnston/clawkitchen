@@ -20,12 +20,16 @@ export default function AgentEditor({ agentId }: { agentId: string }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string>("");
 
-  const [activeTab, setActiveTab] = useState<"identity" | "files">("identity");
+  const [activeTab, setActiveTab] = useState<"identity" | "config" | "skills" | "files">("identity");
 
   const [name, setName] = useState<string>("");
   const [emoji, setEmoji] = useState<string>("");
   const [theme, setTheme] = useState<string>("");
   const [avatar, setAvatar] = useState<string>("");
+
+  const [model, setModel] = useState<string>("");
+
+  const [skillsList, setSkillsList] = useState<string[]>([]);
 
   const [agentFiles, setAgentFiles] = useState<FileEntry[]>([]);
   const [fileName, setFileName] = useState<string>("IDENTITY.md");
@@ -38,9 +42,10 @@ export default function AgentEditor({ agentId }: { agentId: string }) {
       setLoading(true);
       setMessage("");
       try {
-        const [agentsRes, filesRes] = await Promise.all([
+        const [agentsRes, filesRes, skillsRes] = await Promise.all([
           fetch("/api/agents", { cache: "no-store" }),
           fetch(`/api/agents/files?agentId=${encodeURIComponent(agentId)}`, { cache: "no-store" }),
+          fetch(`/api/agents/skills?agentId=${encodeURIComponent(agentId)}`, { cache: "no-store" }),
         ]);
 
         const agentsJson = (await agentsRes.json()) as { agents?: unknown[] };
@@ -48,6 +53,7 @@ export default function AgentEditor({ agentId }: { agentId: string }) {
         const found = list.find((a) => a.id === agentId) ?? null;
         setAgent(found);
         setName(found?.identityName ?? "");
+        setModel(found?.model ?? "");
 
         const filesJson = (await filesRes.json()) as FileListResponse;
         if (filesRes.ok && filesJson.ok) {
@@ -58,6 +64,11 @@ export default function AgentEditor({ agentId }: { agentId: string }) {
               return { name: String(entry.name ?? ""), missing: Boolean(entry.missing) };
             }),
           );
+        }
+
+        const skillsJson = (await skillsRes.json()) as { ok?: boolean; skills?: unknown[] };
+        if (skillsRes.ok && skillsJson.ok) {
+          setSkillsList(Array.isArray(skillsJson.skills) ? (skillsJson.skills as string[]) : []);
         }
       } catch (e: unknown) {
         setMessage(e instanceof Error ? e.message : String(e));
@@ -79,6 +90,25 @@ export default function AgentEditor({ agentId }: { agentId: string }) {
       const json = (await res.json()) as { message?: string; error?: string };
       if (!res.ok) throw new Error(json.message || json.error || "Save failed");
       setMessage("Saved identity via openclaw agents set-identity");
+    } catch (e: unknown) {
+      setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onSaveConfig() {
+    setSaving(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/agents/update", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ agentId, patch: { model } }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error || "Save config failed");
+      setMessage("Saved agent config (model) and restarted gateway");
     } catch (e: unknown) {
       setMessage(e instanceof Error ? e.message : String(e));
     } finally {
@@ -114,7 +144,7 @@ export default function AgentEditor({ agentId }: { agentId: string }) {
     try {
       const res = await fetch(
         `/api/agents/file?agentId=${encodeURIComponent(agentId)}&name=${encodeURIComponent(nextName)}`,
-        { cache: "no-store" }
+        { cache: "no-store" },
       );
       const json = (await res.json()) as { ok?: boolean; error?: string; content?: string };
       if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load file");
@@ -165,6 +195,8 @@ export default function AgentEditor({ agentId }: { agentId: string }) {
         {(
           [
             { id: "identity", label: "Identity" },
+            { id: "config", label: "Config" },
+            { id: "skills", label: "Skills" },
             { id: "files", label: "Files" },
           ] as const
         ).map((t) => (
@@ -255,6 +287,46 @@ export default function AgentEditor({ agentId }: { agentId: string }) {
                 This adds a new agent entry to OpenClaw config and restarts the gateway.
               </p>
             </div>
+          </div>
+        ) : null}
+
+        {activeTab === "config" ? (
+          <div className="ck-glass-strong p-4">
+            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Config</div>
+            <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
+              Thin slice: edit the configured model id for this agent (writes to OpenClaw config).
+            </p>
+            <label className="mt-3 block text-xs font-medium text-[color:var(--ck-text-secondary)]">Model</label>
+            <input
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="openai/gpt-5.2"
+              className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
+            />
+            <div className="mt-3">
+              <button
+                disabled={saving}
+                onClick={onSaveConfig}
+                className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save config"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {activeTab === "skills" ? (
+          <div className="ck-glass-strong p-4">
+            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Skills</div>
+            <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
+              Installed skills detected in this agent workspace (<code>skills/</code>).
+            </p>
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-[color:var(--ck-text-secondary)]">
+              {skillsList.length ? skillsList.map((s) => <li key={s}>{s}</li>) : <li>None detected.</li>}
+            </ul>
+            <p className="mt-3 text-xs text-[color:var(--ck-text-tertiary)]">
+              Next: install/uninstall flows.
+            </p>
           </div>
         ) : null}
 
