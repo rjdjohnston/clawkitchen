@@ -27,11 +27,18 @@ type ToolTextEnvelope = {
 };
 
 async function getGatewayBaseUrlAndToken() {
+  // Allow running ClawKitchen on a different host than the OpenClaw gateway.
+  // Useful for remote dev/prod deployments where the gateway lives elsewhere.
+  const envUrl = (process.env.OPENCLAW_GATEWAY_HTTP_URL || process.env.OPENCLAW_GATEWAY_URL || "").trim();
+  const envToken = (process.env.OPENCLAW_GATEWAY_TOKEN || "").trim();
+
   const cfg = await readOpenClawConfig();
   const port = cfg.gateway?.port ?? 18789;
-  const token = cfg.gateway?.auth?.token;
-  if (!token) throw new Error("Missing gateway.auth.token in ~/.openclaw/openclaw.json");
-  return { baseUrl: `http://127.0.0.1:${port}`, token };
+  const token = envToken || cfg.gateway?.auth?.token;
+  if (!token) throw new Error("Missing gateway token. Set OPENCLAW_GATEWAY_TOKEN or gateway.auth.token in ~/.openclaw/openclaw.json");
+
+  const baseUrl = envUrl || `http://127.0.0.1:${port}`;
+  return { baseUrl, token };
 }
 
 export async function toolsInvoke<T = unknown>(req: ToolsInvokeRequest): Promise<T> {
