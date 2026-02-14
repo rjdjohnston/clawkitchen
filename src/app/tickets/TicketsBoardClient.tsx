@@ -4,6 +4,14 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { TicketStage, TicketSummary } from "@/lib/tickets";
 
+type AgeFilter = "all" | "24h" | "7d" | "30d";
+const AGE_FILTERS: { key: AgeFilter; label: string; maxHours: number | null }[] = [
+  { key: "all", label: "All", maxHours: null },
+  { key: "24h", label: "Last 24h", maxHours: 24 },
+  { key: "7d", label: "Last 7d", maxHours: 24 * 7 },
+  { key: "30d", label: "Last 30d", maxHours: 24 * 30 },
+];
+
 const STAGES: { key: TicketStage; label: string }[] = [
   { key: "backlog", label: "Backlog" },
   { key: "in-progress", label: "In progress" },
@@ -21,6 +29,13 @@ export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [ageFilter, setAgeFilter] = useState<AgeFilter>("all");
+
+  const filteredTickets = useMemo(() => {
+    const selected = AGE_FILTERS.find((f) => f.key === ageFilter) ?? AGE_FILTERS[0];
+    if (!selected.maxHours) return tickets;
+    return tickets.filter((t) => t.ageHours <= selected.maxHours!);
+  }, [tickets, ageFilter]);
 
   const byStage = useMemo(() => {
     const map: Record<TicketStage, TicketSummary[]> = {
@@ -29,12 +44,12 @@ export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
       testing: [],
       done: [],
     };
-    for (const t of tickets) map[t.stage].push(t);
+    for (const t of filteredTickets) map[t.stage].push(t);
     for (const s of Object.keys(map) as TicketStage[]) {
       map[s].sort((a, b) => a.number - b.number);
     }
     return map;
-  }, [tickets]);
+  }, [filteredTickets]);
 
   async function move(ticket: TicketSummary, to: TicketStage) {
     setError(null);
@@ -52,10 +67,26 @@ export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">Tickets</h1>
-        <div className="text-sm text-[color:var(--ck-text-secondary)]">
-          {isPending ? "Updating…" : ""}
+
+        <div className="flex items-center gap-3">
+          <label className="text-xs text-[color:var(--ck-text-secondary)]">
+            Age
+            <select
+              className="ml-2 rounded border border-[color:var(--ck-border-subtle)] bg-transparent px-2 py-1 text-xs"
+              value={ageFilter}
+              onChange={(e) => setAgeFilter(e.target.value as AgeFilter)}
+            >
+              {AGE_FILTERS.map((f) => (
+                <option key={f.key} value={f.key}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="text-sm text-[color:var(--ck-text-secondary)]">{isPending ? "Updating…" : ""}</div>
         </div>
       </div>
 
