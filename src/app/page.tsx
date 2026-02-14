@@ -41,9 +41,7 @@ async function getTeamsFromRecipes(): Promise<{ teamNames: Record<string, string
     const name = String(r.name ?? "").trim();
     if (!name) continue;
 
-    // Support both conventions: <id> and <id>-team.
     teamNames[r.id] = name;
-    teamNames[`${r.id}-team`] = name;
 
     // Custom teams: workspace team recipes that start with custom-.
     if (r.source === "workspace" && r.id.startsWith("custom-")) {

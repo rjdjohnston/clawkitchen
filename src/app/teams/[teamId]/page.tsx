@@ -14,8 +14,7 @@ async function getTeamDisplayName(teamId: string) {
   if (!res.ok) return null;
   try {
     const items = JSON.parse(res.stdout) as RecipeListItem[];
-    const normalized = teamId.endsWith("-team") ? teamId.slice(0, -"-team".length) : teamId;
-    const match = items.find((r) => r.kind === "team" && (r.id === teamId || r.id === normalized));
+    const match = items.find((r) => r.kind === "team" && r.id === teamId);
     return match?.name ?? null;
   } catch {
     return null;
