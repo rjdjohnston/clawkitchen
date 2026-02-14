@@ -431,7 +431,12 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
               </div>
             ) : null}
             <button
-              onClick={onLoadSource}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void onLoadSource();
+              }}
               className="mt-3 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-white/10 active:bg-white/15"
             >
               Load source markdown
