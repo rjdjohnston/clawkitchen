@@ -84,7 +84,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
   const toRecipe = useMemo(() => recipes.find((r) => r.id === toId) ?? null, [recipes, toId]);
 
-  const teamIdValid = teamId.endsWith("-team");
+  const teamIdValid = Boolean(teamId.trim());
   const targetIdValid = toId.trim().startsWith("custom-");
   const targetIsBuiltin = toRecipe?.source === "builtin";
 

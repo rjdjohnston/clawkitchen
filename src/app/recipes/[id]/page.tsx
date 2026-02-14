@@ -27,7 +27,8 @@ export default async function RecipePage({ params }: { params: Promise<{ id: str
 
   // Team recipes should use the Team editor UI.
   if (kind === "team") {
-    redirect(`/teams/${encodeURIComponent(id)}-team`);
+    // Team recipes map directly to /teams/<teamId> (no extra "-team" suffix).
+    redirect(`/teams/${encodeURIComponent(id)}`);
   }
 
   return (
