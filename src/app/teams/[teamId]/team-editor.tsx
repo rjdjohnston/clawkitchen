@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type RecipeListItem = {
   id: string;
@@ -25,6 +26,7 @@ function downloadTextFile(filename: string, text: string) {
 }
 
 export default function TeamEditor({ teamId }: { teamId: string }) {
+  const router = useRouter();
   const [recipes, setRecipes] = useState<RecipeListItem[]>([]);
   const [fromId, setFromId] = useState<string>("");
   const [toId, setToId] = useState<string>(`custom-${teamId}`);
@@ -156,7 +158,10 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
     try {
       const json = await ensureCustomRecipeExists(overwrite);
       setContent(json.content);
-      setMessage(`Saved custom team recipe to workspace recipes: ${json.filePath}`);
+      setMessage(`Saved custom team recipe: ${json.filePath}`);
+      // After saving, take the user back to Home so they can re-enter Teams/Recipes
+      // and see the updated custom recipe list.
+      setTimeout(() => router.push("/"), 250);
     } catch (e: unknown) {
       setMessage(e instanceof Error ? e.message : String(e));
     } finally {
@@ -181,7 +186,8 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Save markdown failed");
-      setMessage(`Saved markdown to ${json.filePath}`);
+      setMessage(`Saved markdown: ${json.filePath}`);
+      setTimeout(() => router.push("/"), 250);
     } catch (e: unknown) {
       setMessage(e instanceof Error ? e.message : String(e));
     } finally {
@@ -336,8 +342,16 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
           <div className="ck-glass-strong p-4">
             <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Notes</div>
             <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-[color:var(--ck-text-secondary)]">
-              <li>Saving writes to workspace recipes dir (does not modify builtin recipes).</li>
-              <li>Next: structured editing of agents/skills/cron in the markdown body.</li>
+              <li>Builtin recipes are treated as read-only; edits should be saved to a custom clone.</li>
+              <li>
+                <strong>Save (create)</strong> creates a new custom recipe file (fails if it already exists).
+              </li>
+              <li>
+                <strong>Save (overwrite)</strong> overwrites the existing custom recipe file.
+              </li>
+              <li>
+                <strong>Save markdown</strong> writes the current editor content to the custom recipe file.
+              </li>
             </ul>
           </div>
         </div>
