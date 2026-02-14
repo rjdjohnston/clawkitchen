@@ -22,31 +22,42 @@ async function getAgents(): Promise<AgentListItem[]> {
   return JSON.parse(res.stdout) as AgentListItem[];
 }
 
-async function getTeamNameMap(): Promise<Record<string, string>> {
+async function getTeamsFromRecipes(): Promise<{ teamNames: Record<string, string>; customTeams: Array<{ teamId: string; name: string; recipeId: string }> }> {
   const res = await runOpenClaw(["recipes", "list"]);
-  if (!res.ok) return {};
+  if (!res.ok) return { teamNames: {}, customTeams: [] };
 
   let items: RecipeListItem[] = [];
   try {
     items = JSON.parse(res.stdout) as RecipeListItem[];
   } catch {
-    return {};
+    return { teamNames: {}, customTeams: [] };
   }
 
-  const map: Record<string, string> = {};
+  const teamNames: Record<string, string> = {};
+  const customTeams: Array<{ teamId: string; name: string; recipeId: string }> = [];
+
   for (const r of items) {
     if (r.kind !== "team") continue;
     const name = String(r.name ?? "").trim();
     if (!name) continue;
 
     // Support both conventions: <id> and <id>-team.
-    map[r.id] = name;
-    map[`${r.id}-team`] = name;
+    teamNames[r.id] = name;
+    teamNames[`${r.id}-team`] = name;
+
+    // Custom teams: workspace team recipes that start with custom-.
+    if (r.source === "workspace" && r.id.startsWith("custom-")) {
+      const teamId = r.id.slice("custom-".length);
+      customTeams.push({ teamId, name, recipeId: r.id });
+    }
   }
-  return map;
+
+  customTeams.sort((a, b) => a.teamId.localeCompare(b.teamId));
+
+  return { teamNames, customTeams };
 }
 
 export default async function Home() {
-  const [agents, teamNames] = await Promise.all([getAgents(), getTeamNameMap()]);
-  return <HomeClient agents={agents} teamNames={teamNames} />;
+  const [agents, { teamNames, customTeams }] = await Promise.all([getAgents(), getTeamsFromRecipes()]);
+  return <HomeClient agents={agents} teamNames={teamNames} customTeams={customTeams} />;
 }
