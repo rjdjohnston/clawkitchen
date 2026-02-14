@@ -8,9 +8,18 @@ type Recipe = {
   source: "builtin" | "workspace";
 };
 
-async function getRecipes(): Promise<Recipe[]> {
-  const { stdout } = await runOpenClaw(["recipes", "list"]);
-  return JSON.parse(stdout) as Recipe[];
+async function getRecipes(): Promise<{ recipes: Recipe[]; error: string | null }> {
+  const res = await runOpenClaw(["recipes", "list"]);
+  if (!res.ok) {
+    const err = res.stderr.trim() || `openclaw recipes list failed (exit=${res.exitCode})`;
+    return { recipes: [], error: err };
+  }
+
+  try {
+    return { recipes: JSON.parse(res.stdout) as Recipe[], error: null };
+  } catch {
+    return { recipes: [], error: "Failed to parse openclaw recipes list output" };
+  }
 }
 
 function RecipesSection({ title, items }: { title: string; items: Recipe[] }) {
@@ -45,7 +54,7 @@ function RecipesSection({ title, items }: { title: string; items: Recipe[] }) {
 }
 
 export default async function RecipesPage() {
-  const recipes = await getRecipes();
+  const { recipes, error } = await getRecipes();
 
   const builtin = recipes.filter((r) => r.source === "builtin");
   const workspace = recipes.filter((r) => r.source === "workspace");
@@ -64,6 +73,17 @@ export default async function RecipesPage() {
           Home
         </Link>
       </div>
+
+      {error ? (
+        <div className="mt-6 rounded-[var(--ck-radius-sm)] border border-[color:var(--ck-border-subtle)] bg-[color:var(--ck-bg-glass)] p-4 text-sm text-[color:var(--ck-text-secondary)]">
+          <div className="font-medium text-[color:var(--ck-text-primary)]">Recipes unavailable</div>
+          <div className="mt-1 whitespace-pre-wrap">{error}</div>
+          <div className="mt-3 text-xs text-[color:var(--ck-text-tertiary)]">
+            If this says &quot;unknown command &apos;recipes&apos;&quot;, the Recipes plugin is likely disabled/not allowlisted.
+            Try: <code className="ml-1">openclaw plugins enable recipes</code> then restart the gateway.
+          </div>
+        </div>
+      ) : null}
 
       <RecipesSection title={`Builtin (${builtin.length})`} items={builtin} />
       <RecipesSection title={`Custom team recipes (${customTeams.length})`} items={customTeams} />
