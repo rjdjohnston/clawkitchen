@@ -37,6 +37,18 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string>("");
 
+  function flashMessage(next: string) {
+    setMessage(next);
+    // Keep feedback visible even if the user is mid-page.
+    try {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    } catch {
+      // ignore
+    }
+  }
+
   const [teamFiles, setTeamFiles] = useState<Array<{ name: string; missing: boolean }>>([]);
   const [fileName, setFileName] = useState<string>("SOUL.md");
   const [fileContent, setFileContent] = useState<string>("");
@@ -111,7 +123,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
           setSkillsList(Array.isArray(skillsJson.skills) ? skillsJson.skills : []);
         }
       } catch (e: unknown) {
-        setMessage(e instanceof Error ? e.message : String(e));
+        flashMessage(e instanceof Error ? e.message : String(e));
       } finally {
         setLoading(false);
       }
@@ -120,7 +132,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
   async function onLoadSource() {
     if (!fromId) return;
-    setMessage("");
+    flashMessage("");
     setSaving(true);
     try {
       const res = await fetch(`/api/recipes/${encodeURIComponent(fromId)}`, { cache: "no-store" });
@@ -128,9 +140,9 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
       if (!res.ok) throw new Error(json.error || "Failed to load recipe");
       const r = json.recipe as RecipeDetail;
       setContent(r.content);
-      setMessage(`Loaded source recipe: ${r.id}`);
+      flashMessage(`Loaded source recipe: ${r.id}`);
     } catch (e: unknown) {
-      setMessage(e instanceof Error ? e.message : String(e));
+      flashMessage(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -154,16 +166,23 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
   async function onSaveCustom(overwrite: boolean) {
     setSaving(true);
-    setMessage("");
+    flashMessage("");
     try {
       const json = await ensureCustomRecipeExists(overwrite);
       setContent(json.content);
-      setMessage(`Saved custom team recipe: ${json.filePath}`);
+      flashMessage(`Saved custom team recipe: ${json.filePath}`);
       // After saving, take the user back to Home so they can re-enter Teams/Recipes
       // and see the updated custom recipe list.
       setTimeout(() => router.push("/"), 250);
     } catch (e: unknown) {
-      setMessage(e instanceof Error ? e.message : String(e));
+      const raw = e instanceof Error ? e.message : String(e);
+      if (raw.includes("Refusing to overwrite existing recipe")) {
+        flashMessage(
+          `${raw}\n\nTip: that usually means the custom recipe already exists. Use “Save (overwrite)” or change the To id.`
+        );
+      } else {
+        flashMessage(raw);
+      }
     } finally {
       setSaving(false);
     }
@@ -171,10 +190,10 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
   async function onSaveMarkdown() {
     const id = toId.trim();
-    if (!id) return setMessage("Custom recipe id is required");
+    if (!id) return flashMessage("Custom recipe id is required");
 
     setSaving(true);
-    setMessage("");
+    flashMessage("");
     try {
       // Ensure the workspace file exists first.
       await ensureCustomRecipeExists(false).catch(() => null);
@@ -186,10 +205,10 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Save markdown failed");
-      setMessage(`Saved markdown: ${json.filePath}`);
+      flashMessage(`Saved markdown: ${json.filePath}`);
       setTimeout(() => router.push("/"), 250);
     } catch (e: unknown) {
-      setMessage(e instanceof Error ? e.message : String(e));
+      flashMessage(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -197,7 +216,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
   async function onLoadTeamFile(name: string) {
     setSaving(true);
-    setMessage("");
+    flashMessage("");
     try {
       const res = await fetch(
         `/api/teams/file?teamId=${encodeURIComponent(teamId)}&name=${encodeURIComponent(name)}`,
@@ -208,7 +227,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
       setFileName(name);
       setFileContent(String(json.content ?? ""));
     } catch (e: unknown) {
-      setMessage(e instanceof Error ? e.message : String(e));
+      flashMessage(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -216,7 +235,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
   async function onSaveTeamFile() {
     setSaving(true);
-    setMessage("");
+    flashMessage("");
     try {
       const res = await fetch("/api/teams/file", {
         method: "PUT",
@@ -225,9 +244,9 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "Failed to save file");
-      setMessage(`Saved ${fileName}`);
+      flashMessage(`Saved ${fileName}`);
     } catch (e: unknown) {
-      setMessage(e instanceof Error ? e.message : String(e));
+      flashMessage(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -242,6 +261,12 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         Phase v2 (thin slice): bootstrap a <strong>custom team recipe</strong> for this installed team, without
         modifying builtin recipes.
       </p>
+
+      {message ? (
+        <div className="mt-4 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3 text-sm text-[color:var(--ck-text-primary)]">
+          {message}
+        </div>
+      ) : null}
 
       <div className="mt-6 flex flex-wrap gap-2">
         {(
@@ -608,12 +633,6 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
             className="mt-2 h-[55vh] w-full resize-none rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-3 font-mono text-xs text-[color:var(--ck-text-primary)]"
             spellCheck={false}
           />
-        </div>
-      ) : null}
-
-      {message ? (
-        <div className="mt-4 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3 text-sm text-[color:var(--ck-text-primary)]">
-          {message}
         </div>
       ) : null}
 
