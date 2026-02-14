@@ -11,6 +11,31 @@ const STAGES: { key: TicketStage; label: string }[] = [
   { key: "done", label: "Done" },
 ];
 
+type DateFilter = "all" | "today" | "yesterday" | "7d" | "30d" | "custom";
+const DATE_FILTERS: { key: DateFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "today", label: "Today" },
+  { key: "yesterday", label: "Yesterday" },
+  { key: "7d", label: "Last 7 days" },
+  { key: "30d", label: "Last 30 days" },
+  { key: "custom", label: "Custom range" },
+];
+
+function startOfLocalDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+}
+
+function parseDateInput(value: string): Date | null {
+  if (!value) return null;
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1;
+  const day = Number(m[3]);
+  const d = new Date(y, mo, day, 0, 0, 0, 0);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
 function formatAge(hours: number) {
   if (hours < 1) return `${Math.max(1, Math.round(hours * 60))}m`;
   if (hours < 48) return `${Math.round(hours)}h`;
@@ -21,6 +46,51 @@ export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [dateFilter, setDateFilter] = useState<DateFilter>("30d");
+  const [customFrom, setCustomFrom] = useState<string>("");
+  const [customTo, setCustomTo] = useState<string>("");
+
+  const filteredTickets = useMemo(() => {
+    if (dateFilter === "all") return tickets;
+
+    const now = new Date();
+    const todayStart = startOfLocalDay(now);
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+    let from: Date | null = null;
+    let toExclusive: Date | null = null;
+
+    if (dateFilter === "today") {
+      from = todayStart;
+      toExclusive = new Date(todayStart);
+      toExclusive.setDate(toExclusive.getDate() + 1);
+    } else if (dateFilter === "yesterday") {
+      from = yesterdayStart;
+      toExclusive = todayStart;
+    } else if (dateFilter === "7d") {
+      from = new Date(todayStart);
+      from.setDate(from.getDate() - 6); // include today
+    } else if (dateFilter === "30d") {
+      from = new Date(todayStart);
+      from.setDate(from.getDate() - 29); // include today
+    } else if (dateFilter === "custom") {
+      from = parseDateInput(customFrom);
+      const to = parseDateInput(customTo);
+      if (to) {
+        toExclusive = new Date(to);
+        toExclusive.setDate(toExclusive.getDate() + 1);
+      }
+    }
+
+    return tickets.filter((t) => {
+      const updated = new Date(t.updatedAt);
+      if (!Number.isFinite(updated.getTime())) return false;
+      if (from && updated < from) return false;
+      if (toExclusive && updated >= toExclusive) return false;
+      return true;
+    });
+  }, [tickets, dateFilter, customFrom, customTo]);
 
   const byStage = useMemo(() => {
     const map: Record<TicketStage, TicketSummary[]> = {
@@ -29,12 +99,12 @@ export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
       testing: [],
       done: [],
     };
-    for (const t of tickets) map[t.stage].push(t);
+    for (const t of filteredTickets) map[t.stage].push(t);
     for (const s of Object.keys(map) as TicketStage[]) {
       map[s].sort((a, b) => a.number - b.number);
     }
     return map;
-  }, [tickets]);
+  }, [filteredTickets]);
 
   async function move(ticket: TicketSummary, to: TicketStage) {
     setError(null);
@@ -52,10 +122,49 @@ export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">Tickets</h1>
-        <div className="text-sm text-[color:var(--ck-text-secondary)]">
-          {isPending ? "Updating…" : ""}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-xs text-[color:var(--ck-text-secondary)]">
+            Time
+            <select
+              className="ml-2 rounded border border-[color:var(--ck-border-subtle)] bg-transparent px-2 py-1 text-xs"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value as DateFilter)}
+            >
+              {DATE_FILTERS.map((f) => (
+                <option key={f.key} value={f.key}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {dateFilter === "custom" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs text-[color:var(--ck-text-secondary)]">
+                From
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="ml-2 rounded border border-[color:var(--ck-border-subtle)] bg-transparent px-2 py-1 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[color:var(--ck-text-secondary)]">
+                To
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="ml-2 rounded border border-[color:var(--ck-border-subtle)] bg-transparent px-2 py-1 text-xs"
+                />
+              </label>
+            </div>
+          ) : null}
+
+          <div className="text-sm text-[color:var(--ck-text-secondary)]">{isPending ? "Updating…" : ""}</div>
         </div>
       </div>
 
