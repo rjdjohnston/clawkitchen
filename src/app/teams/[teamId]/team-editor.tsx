@@ -25,6 +25,27 @@ function downloadTextFile(filename: string, text: string) {
   URL.revokeObjectURL(url);
 }
 
+function forceFrontmatterId(md: string, id: string) {
+  if (!md.startsWith("---\n")) return md;
+  const end = md.indexOf("\n---\n", 4);
+  if (end === -1) return md;
+  const fm = md.slice(4, end);
+  const body = md.slice(end + 5);
+
+  const lines = fm.split("\n");
+  let found = false;
+  const nextLines = lines.map((line) => {
+    if (/^id\s*:/i.test(line)) {
+      found = true;
+      return `id: ${id}`;
+    }
+    return line;
+  });
+  if (!found) nextLines.unshift(`id: ${id}`);
+
+  return `---\n${nextLines.join("\n")}\n---\n${body}`;
+}
+
 export default function TeamEditor({ teamId }: { teamId: string }) {
   const router = useRouter();
   const [recipes, setRecipes] = useState<RecipeListItem[]>([]);
@@ -196,15 +217,21 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
     flashMessage("");
     try {
       // Ensure the workspace file exists first.
-      await ensureCustomRecipeExists(false).catch(() => null);
+      // Save markdown should behave like "overwrite" by default.
+      await ensureCustomRecipeExists(true).catch(() => null);
+
+      // The editor content may be loaded from a different source recipe. Force the
+      // frontmatter id to match the target route id to avoid 400s.
+      const nextContent = forceFrontmatterId(content, id);
 
       const res = await fetch(`/api/recipes/${encodeURIComponent(id)}`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content: nextContent }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Save markdown failed");
+      setContent(nextContent);
       flashMessage(`Saved markdown: ${json.filePath}`);
       setTimeout(() => router.push("/"), 250);
     } catch (e: unknown) {
