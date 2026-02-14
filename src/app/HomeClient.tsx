@@ -19,7 +19,20 @@ function inferTeamIdFromWorkspace(workspace: string | undefined) {
   return team || null;
 }
 
-export default function HomeClient({ agents }: { agents: AgentListItem[] }) {
+function normalizeTeamId(teamId: string) {
+  // Support legacy workspaces that used a "-team" suffix.
+  return teamId.endsWith("-team") ? teamId.slice(0, -"-team".length) : teamId;
+}
+
+export default function HomeClient({
+  agents,
+  teamNames,
+  customTeams,
+}: {
+  agents: AgentListItem[];
+  teamNames: Record<string, string>;
+  customTeams: Array<{ teamId: string; name: string; recipeId: string }>;
+}) {
   const teamIds = useMemo(() => {
     const s = new Set<string>();
     for (const a of agents) {
@@ -33,6 +46,11 @@ export default function HomeClient({ agents }: { agents: AgentListItem[] }) {
 
   const grouped = useMemo(() => {
     const groups = new Map<string, AgentListItem[]>();
+
+    function displayNameFor(teamId: string) {
+      const normalized = normalizeTeamId(teamId);
+      return teamNames[teamId] || teamNames[normalized] || teamId;
+    }
 
     for (const a of agents) {
       const teamId = inferTeamIdFromWorkspace(a.workspace) ?? "personal";
@@ -50,13 +68,18 @@ export default function HomeClient({ agents }: { agents: AgentListItem[] }) {
       return a.localeCompare(b);
     });
 
-    return keys.map((k) => ({
-      key: k,
-      title: k === "personal" ? "Personal / Unassigned" : k,
-      agents: (groups.get(k) ?? []).slice().sort((a, b) => a.id.localeCompare(b.id)),
-      isTeam: k !== "personal",
-    }));
-  }, [agents, teamFilter]);
+    return keys.map((k) => {
+      const display = k === "personal" ? "Personal / Unassigned" : displayNameFor(k);
+      return {
+        key: k,
+        title: display,
+        // Keep the raw id visible, but deemphasize it.
+        subtitle: k === "personal" ? null : normalizeTeamId(k),
+        agents: (groups.get(k) ?? []).slice().sort((a, b) => a.id.localeCompare(b.id)),
+        isTeam: k !== "personal",
+      };
+    });
+  }, [agents, teamFilter, teamNames]);
 
   return (
     <div className="ck-glass mx-auto max-w-5xl p-6 sm:p-8">
@@ -102,21 +125,51 @@ export default function HomeClient({ agents }: { agents: AgentListItem[] }) {
             onChange={(e) => setTeamFilter(e.target.value)}
           >
             <option value="all">All teams</option>
-            {teamIds.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
+            {teamIds.map((t) => {
+              const label = teamNames[t] || teamNames[normalizeTeamId(t)] || t;
+              return (
+                <option key={t} value={t}>
+                  {label}
+                </option>
+              );
+            })}
             <option value="personal">Personal / Unassigned</option>
           </select>
         </div>
+      ) : null}
+
+      {customTeams.length ? (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold tracking-tight text-[color:var(--ck-text-primary)]">Teams</h2>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {customTeams.map((t) => (
+              <Link
+                key={t.teamId}
+                href={`/teams/${encodeURIComponent(t.teamId)}`}
+                className="ck-glass block px-4 py-3 transition-colors hover:bg-[color:var(--ck-bg-glass-strong)]"
+              >
+                <div className="truncate font-medium text-[color:var(--ck-text-primary)]">{t.name}</div>
+                <div className="mt-1 truncate text-xs text-[color:var(--ck-text-secondary)]">{t.teamId}</div>
+                <div className="mt-1 truncate text-xs text-[color:var(--ck-text-tertiary)]">Recipe: {t.recipeId}</div>
+              </Link>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-[color:var(--ck-text-tertiary)]">
+            Teams appear here when you have a workspace custom team recipe (custom-*), even before you scaffold the team.
+          </p>
+        </section>
       ) : null}
 
       <div className="mt-8 space-y-8">
         {grouped.map((g) => (
           <section key={g.key}>
             <div className="flex items-center justify-between gap-4">
-              <h2 className="text-lg font-semibold tracking-tight text-[color:var(--ck-text-primary)]">{g.title}</h2>
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-semibold tracking-tight text-[color:var(--ck-text-primary)]">{g.title}</h2>
+                {g.subtitle ? (
+                  <div className="mt-0.5 truncate text-xs text-[color:var(--ck-text-secondary)]">{g.subtitle}</div>
+                ) : null}
+              </div>
               {g.isTeam ? (
                 <Link
                   href={`/teams/${encodeURIComponent(g.key)}`}

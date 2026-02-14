@@ -9,12 +9,55 @@ type AgentListItem = {
   isDefault?: boolean;
 };
 
+type RecipeListItem = {
+  id: string;
+  name: string;
+  kind: "agent" | "team";
+  source: "builtin" | "workspace";
+};
+
 async function getAgents(): Promise<AgentListItem[]> {
-  const { stdout } = await runOpenClaw(["agents", "list", "--json"]);
-  return JSON.parse(stdout) as AgentListItem[];
+  const res = await runOpenClaw(["agents", "list", "--json"]);
+  if (!res.ok) return [];
+  return JSON.parse(res.stdout) as AgentListItem[];
+}
+
+async function getTeamsFromRecipes(): Promise<{ teamNames: Record<string, string>; customTeams: Array<{ teamId: string; name: string; recipeId: string }> }> {
+  const res = await runOpenClaw(["recipes", "list"]);
+  if (!res.ok) return { teamNames: {}, customTeams: [] };
+
+  let items: RecipeListItem[] = [];
+  try {
+    items = JSON.parse(res.stdout) as RecipeListItem[];
+  } catch {
+    return { teamNames: {}, customTeams: [] };
+  }
+
+  const teamNames: Record<string, string> = {};
+  const customTeams: Array<{ teamId: string; name: string; recipeId: string }> = [];
+
+  for (const r of items) {
+    if (r.kind !== "team") continue;
+    const name = String(r.name ?? "").trim();
+    if (!name) continue;
+
+    // Support both conventions: <id> and <id>-team.
+    teamNames[r.id] = name;
+    teamNames[`${r.id}-team`] = name;
+
+    // Custom teams: workspace team recipes that start with custom-.
+    if (r.source === "workspace" && r.id.startsWith("custom-")) {
+      const teamId = r.id.slice("custom-".length);
+      customTeams.push({ teamId, name, recipeId: r.id });
+    }
+  }
+
+  customTeams.sort((a, b) => a.teamId.localeCompare(b.teamId));
+
+  return { teamNames, customTeams };
 }
 
 export default async function Home() {
-  const agents = await getAgents();
-  return <HomeClient agents={agents} />;
+  const [agents, { teamNames, customTeams }] = await Promise.all([getAgents(), getTeamsFromRecipes()]);
+  return <HomeClient agents={agents} teamNames={teamNames} customTeams={customTeams} />;
 }
