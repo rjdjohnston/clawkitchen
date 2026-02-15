@@ -81,9 +81,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {/* Tailwind UI-inspired notifications */}
       <div
         aria-live="assertive"
-        className="pointer-events-none fixed inset-0 z-[100] flex items-start px-4 py-6 sm:items-start sm:p-6"
+        className="pointer-events-none fixed inset-0 z-[100] flex items-end px-4 py-6 sm:p-6"
       >
-        <div className="flex w-full flex-col items-end space-y-4">
+        <div className="flex w-full flex-col items-start space-y-4">
           {toasts.map((t) => (
             <div
               key={t.id}
