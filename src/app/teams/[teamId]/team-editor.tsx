@@ -53,7 +53,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [lockedFromId, setLockedFromId] = useState<string | null>(null);
   const [lockedFromName, setLockedFromName] = useState<string | null>(null);
   const [provenanceMissing, setProvenanceMissing] = useState(false);
-  const [toId, setToId] = useState<string>(`custom-${teamId}`);
+  const [toId, setToId] = useState<string>(teamId);
   const [toName, setToName] = useState<string>(`Custom ${teamId}`);
   const [content, setContent] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"recipe" | "agents" | "skills" | "cron" | "files">("recipe");
@@ -96,7 +96,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
   // Initialize defaults whenever we navigate to a new team.
   useEffect(() => {
-    setToId(`custom-${teamId}`);
+    setToId(teamId);
     setToName(`Custom ${teamId}`);
   }, [teamId]);
 
