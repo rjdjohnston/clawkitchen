@@ -11,10 +11,10 @@ type RecipeListItem = {
 };
 
 function slugifyId(input: string) {
-  return input
+  return String(input ?? "")
     .toLowerCase()
     .trim()
-    .replace(/['\u001f-\u007f]/g, "")
+    // Replace any run of non-alphanumeric chars with a hyphen
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/--+/g, "-");
