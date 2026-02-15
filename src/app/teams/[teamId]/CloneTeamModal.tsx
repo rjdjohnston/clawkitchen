@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
 type RecipeListItem = {
@@ -35,6 +35,17 @@ export function CloneTeamModal({
   const [id, setId] = useState("");
   const [idTouched, setIdTouched] = useState(false);
 
+  // Reset fields every time the modal opens.
+  useEffect(() => {
+    if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setName("");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setId("");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIdTouched(false);
+  }, [open]);
+
   const derivedId = useMemo(() => slugifyId(name), [name]);
   const effectiveId = idTouched ? id : derivedId;
 
@@ -61,14 +72,7 @@ export function CloneTeamModal({
             <label className="mt-4 block text-xs font-medium text-[color:var(--ck-text-secondary)]">New team name</label>
             <input
               value={name}
-              onChange={(e) => {
-                const next = e.target.value;
-                setName(next);
-                // initialize values on first edit
-                if (!idTouched && !id) {
-                  // keep id blank; effectiveId will derive live
-                }
-              }}
+              onChange={(e) => setName(e.target.value)}
               className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
             />
 
