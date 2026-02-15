@@ -59,6 +59,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [activeTab, setActiveTab] = useState<"recipe" | "agents" | "skills" | "cron" | "files">("recipe");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadingSource, setLoadingSource] = useState(false);
   const [message, setMessage] = useState<string>("");
 
   function flashMessage(next: string) {
@@ -209,7 +210,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   async function onLoadSource() {
     if (!fromId) return;
     flashMessage("");
-    setSaving(true);
+    setLoadingSource(true);
     try {
       const res = await fetch(`/api/recipes/${encodeURIComponent(fromId)}`, { cache: "no-store" });
       const json = await res.json();
@@ -220,7 +221,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
     } catch (e: unknown) {
       flashMessage(e instanceof Error ? e.message : String(e));
     } finally {
-      setSaving(false);
+      setLoadingSource(false);
     }
   }
 
@@ -418,14 +419,15 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
             ) : null}
             <button
               type="button"
+              disabled={loadingSource || !fromId}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 void onLoadSource();
               }}
-              className="mt-3 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-white/10 active:bg-white/15"
+              className="mt-3 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-white/10 active:bg-white/15 disabled:opacity-60"
             >
-              Load source markdown
+              {loadingSource ? "Loading…" : "Load source markdown"}
             </button>
 
             {provenanceMissing ? (
