@@ -112,7 +112,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               <div
                 key={t.id}
                 className={
-                  "pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg border border-white/10 bg-[color:var(--ck-bg-glass-strong)] shadow-[var(--ck-shadow-2)] transition-all duration-200 ease-out " +
+                  "pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg border bg-[color:var(--ck-toast-bg)] shadow-[var(--ck-shadow-2)] transition-all duration-200 ease-out border-[color:var(--ck-toast-border)] " +
                   motion
                 }
               >

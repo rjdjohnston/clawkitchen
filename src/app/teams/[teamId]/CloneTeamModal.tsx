@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
 type RecipeListItem = {
@@ -34,17 +34,6 @@ export function CloneTeamModal({
   const [name, setName] = useState("");
   const [id, setId] = useState("");
   const [idTouched, setIdTouched] = useState(false);
-
-  // Reset fields every time the modal opens.
-  useEffect(() => {
-    if (!open) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setName("");
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setId("");
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIdTouched(false);
-  }, [open]);
 
   const derivedId = useMemo(() => slugifyId(name), [name]);
   const effectiveId = idTouched ? id : derivedId;

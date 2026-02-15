@@ -56,6 +56,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const toast = useToast();
 
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [cloneNonce, setCloneNonce] = useState(0);
 
   function flashMessage(next: string, kind: "success" | "error" | "info" = "info") {
     const msg = String(next ?? "").trim();
@@ -188,7 +189,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
           setSkillsList(Array.isArray(skillsJson.skills) ? skillsJson.skills : []);
         }
       } catch (e: unknown) {
-        flashMessage(e instanceof Error ? e.message : String(e));
+        flashMessage(e instanceof Error ? e.message : String(e), "error");
       } finally {
         setLoading(false);
       }
@@ -199,7 +200,6 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   async function onLoadTeamRecipeMarkdown() {
     const id = toId.trim();
     if (!id) return;
-    flashMessage("");
     setLoadingSource(true);
     try {
       const res = await fetch(`/api/recipes/${encodeURIComponent(id)}`, { cache: "no-store" });
@@ -210,9 +210,9 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
       }
       const r = json.recipe as RecipeDetail;
       setContent(r.content);
-      flashMessage(`Loaded team recipe: ${r.id}`);
+      flashMessage(`Loaded team recipe: ${r.id}`, "success");
     } catch (e: unknown) {
-      flashMessage(e instanceof Error ? e.message : String(e));
+      flashMessage(e instanceof Error ? e.message : String(e), "error");
     } finally {
       setLoadingSource(false);
     }
@@ -258,10 +258,10 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         setContent(json.content);
       }
 
-      flashMessage(`Saved team recipe: ${json.filePath}`);
+      flashMessage(`Saved team recipe: ${json.filePath}`, "success");
     } catch (e: unknown) {
       const raw = e instanceof Error ? e.message : String(e);
-      flashMessage(raw);
+      flashMessage(raw, "error");
     } finally {
       setSaving(false);
     }
@@ -269,7 +269,6 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
   async function onLoadTeamFile(name: string) {
     setSaving(true);
-    flashMessage("");
     try {
       const res = await fetch(
         `/api/teams/file?teamId=${encodeURIComponent(teamId)}&name=${encodeURIComponent(name)}`,
@@ -280,7 +279,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
       setFileName(name);
       setFileContent(String(json.content ?? ""));
     } catch (e: unknown) {
-      flashMessage(e instanceof Error ? e.message : String(e));
+      flashMessage(e instanceof Error ? e.message : String(e), "error");
     } finally {
       setSaving(false);
     }
@@ -288,7 +287,6 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
   async function onSaveTeamFile() {
     setSaving(true);
-    flashMessage("");
     try {
       const res = await fetch("/api/teams/file", {
         method: "PUT",
@@ -297,9 +295,9 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "Failed to save file");
-      flashMessage(`Saved ${fileName}`);
+      flashMessage(`Saved ${fileName}`, "success");
     } catch (e: unknown) {
-      flashMessage(e instanceof Error ? e.message : String(e));
+      flashMessage(e instanceof Error ? e.message : String(e), "error");
     } finally {
       setSaving(false);
     }
@@ -386,6 +384,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
               <button
                 disabled={saving || !teamIdValid || targetIsBuiltin}
                 onClick={() => {
+                  setCloneNonce((n) => n + 1);
                   setCloneOpen(true);
                 }}
                 className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-white/10 active:bg-white/15 disabled:opacity-50"
@@ -410,10 +409,10 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                     });
                     const json = await res.json();
                     if (!res.ok || !json.ok) throw new Error(json.error || "Delete failed");
-                    flashMessage("Deleted team successfully");
+                    flashMessage("Deleted team successfully", "success");
                     setTimeout(() => router.push("/"), 250);
                   } catch (e: unknown) {
-                    flashMessage(e instanceof Error ? e.message : String(e));
+                    flashMessage(e instanceof Error ? e.message : String(e), "error");
                   } finally {
                     setSaving(false);
                   }
@@ -743,6 +742,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
       ) : null}
 
       <CloneTeamModal
+        key={cloneNonce}
         open={cloneOpen}
         onClose={() => setCloneOpen(false)}
         recipes={recipes}
