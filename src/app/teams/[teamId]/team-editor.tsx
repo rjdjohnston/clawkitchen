@@ -87,27 +87,18 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
   const toRecipe = useMemo(() => recipes.find((r) => r.id === toId) ?? null, [recipes, toId]);
 
-  function titleCaseId(id: string) {
-    const s = id
-      .replace(/[-_]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!s) return id;
-    return s
-      .split(" ")
-      .map((w) => {
-        if (/^(ai|api|cli|ui|ux|sre|qa|devops)$/i.test(w)) return w.toUpperCase();
-        return w.slice(0, 1).toUpperCase() + w.slice(1);
-      })
-      .join(" ");
-  }
-
   const teamIdValid = Boolean(teamId.trim());
   const targetIdValid = Boolean(toId.trim());
   const targetIsBuiltin = toRecipe?.source === "builtin";
   // The "Team id" field is really the *custom recipe id* target.
   // It should be editable, and we must not auto-prefix/modify what the user types.
   const canEditTargetId = true;
+
+  // Initialize defaults whenever we navigate to a new team.
+  useEffect(() => {
+    setToId(`custom-${teamId}`);
+    setToName(`Custom ${teamId}`);
+  }, [teamId]);
 
   useEffect(() => {
     (async () => {
@@ -123,13 +114,8 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         const list = (json.recipes ?? []) as RecipeListItem[];
         setRecipes(list);
 
-        // If the target recipe already exists, treat it as "saved" (lock id) and load its name.
-        // Only set a default name when we haven't diverged from the initial default.
-        const existingCustom = list.find((r) => r.id === toId);
-        if (existingCustom?.name) setToName(existingCustom.name);
-        else {
-          setToName((prev) => (prev === `Custom ${teamId}` ? titleCaseId(teamId) : prev));
-        }
+        // Note: do not sync toName/toId from remote state here.
+        // Edits to the target id/name must not trigger reload loops while typing.
 
         // Prefer a recipe that corresponds to this teamId.
         // Primary source of truth: provenance stored in the team workspace.
@@ -218,7 +204,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         setLoading(false);
       }
     })();
-  }, [teamId, toId]);
+  }, [teamId]);
 
   async function onLoadSource() {
     if (!fromId) return;
