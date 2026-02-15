@@ -103,11 +103,11 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   }
 
   const teamIdValid = Boolean(teamId.trim());
-  const targetIdValid = toId.trim().startsWith("custom-");
+  const targetIdValid = Boolean(toId.trim());
   const targetIsBuiltin = toRecipe?.source === "builtin";
-  // Editing an installed team should never allow changing its team id.
-  // The underlying custom recipe id is derived (custom-<teamId>) and shown separately.
-  const canEditTargetId = false;
+  // The "Team id" field is really the *custom recipe id* target.
+  // It should be editable, and we must not auto-prefix/modify what the user types.
+  const canEditTargetId = true;
 
   useEffect(() => {
     (async () => {
@@ -483,14 +483,14 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
             <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Custom recipe target</div>
             <label className="mt-3 block text-xs font-medium text-[color:var(--ck-text-secondary)]">Team id</label>
             <input
-              value={canEditTargetId ? toId : teamId}
+              value={toId}
               onChange={(e) => setToId(e.target.value)}
               disabled={!canEditTargetId}
               className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)] disabled:opacity-70"
             />
-            {!canEditTargetId ? (
-              <div className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">Recipe id: <code>{toId}</code></div>
-            ) : null}
+            <div className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">
+              This is the <b>custom recipe id</b> that will be created/overwritten when you save.
+            </div>
 
             <label className="mt-3 block text-xs font-medium text-[color:var(--ck-text-secondary)]">Team name</label>
             <input
