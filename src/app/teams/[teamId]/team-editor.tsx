@@ -220,11 +220,12 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
     }
   }
 
-  async function ensureCustomRecipeExists(args: { overwrite: boolean; toId?: string; toName?: string }) {
+  async function ensureCustomRecipeExists(args: { overwrite: boolean; toId?: string; toName?: string; scaffold?: boolean }) {
     const f = fromId.trim();
     const id = String(args.toId ?? toId).trim();
     const name = String(args.toName ?? toName).trim();
     const overwrite = Boolean(args.overwrite);
+    const scaffold = Boolean(args.scaffold);
 
     if (!f) throw new Error("Source recipe id is required");
     if (!id) throw new Error("Custom recipe id is required");
@@ -232,18 +233,22 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
     const res = await fetch("/api/recipes/clone", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ fromId: f, toId: id, toName: name || undefined, overwrite }),
+      body: JSON.stringify({ fromId: f, toId: id, toName: name || undefined, overwrite, scaffold }),
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Save failed");
-    return json as { filePath: string; content: string };
+    return json as { filePath: string; content: string; scaffold?: { ok: boolean; error?: string } | null };
   }
 
-  async function onSaveCustom(overwrite: boolean, overrides?: { toId?: string; toName?: string }) {
+  async function onSaveCustom(overwrite: boolean, overrides?: { toId?: string; toName?: string; scaffold?: boolean }) {
     setSaving(true);
     flashMessage("");
     try {
       const json = await ensureCustomRecipeExists({ overwrite, ...overrides });
+
+      if (json.scaffold && !json.scaffold.ok) {
+        flashMessage(`Scaffold failed (recipe was still cloned): ${json.scaffold.error || "Unknown error"}`, "error");
+      }
 
       // If the user has edited the markdown, "Save (overwrite)" should persist both
       // the updated name (frontmatter) and the edited markdown.
@@ -728,13 +733,13 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         open={cloneOpen}
         onClose={() => setCloneOpen(false)}
         recipes={recipes}
-        onConfirm={async ({ id, name }) => {
+        onConfirm={async ({ id, name, scaffold }) => {
           setCloneOpen(false);
           // Set the target fields for UI, but DO NOT rely on them for the clone.
           // Clone must use the modal-provided id/name.
           setToId(id);
           setToName(name);
-          await onSaveCustom(false, { toId: id, toName: name });
+          await onSaveCustom(false, { toId: id, toName: name, scaffold });
         }}
       />
 

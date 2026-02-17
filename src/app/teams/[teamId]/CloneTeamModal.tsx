@@ -29,11 +29,12 @@ export function CloneTeamModal({
   open: boolean;
   onClose: () => void;
   recipes: RecipeListItem[];
-  onConfirm: (args: { id: string; name: string }) => void;
+  onConfirm: (args: { id: string; name: string; scaffold: boolean }) => void;
 }) {
   const [name, setName] = useState("");
   const [id, setId] = useState("");
   const [idTouched, setIdTouched] = useState(false);
+  const [scaffold, setScaffold] = useState(true);
 
   const derivedId = useMemo(() => slugifyId(name), [name]);
   const effectiveId = idTouched ? id : derivedId;
@@ -85,6 +86,21 @@ export function CloneTeamModal({
               {availability.state === "taken" ? "That id is already taken." : availability.state === "available" ? "Id is available." : ""}
             </div>
 
+            <label className="mt-5 flex items-start gap-2 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3 text-sm text-[color:var(--ck-text-secondary)]">
+              <input
+                type="checkbox"
+                checked={scaffold}
+                onChange={(e) => setScaffold(e.target.checked)}
+                className="mt-1"
+              />
+              <span>
+                Also scaffold workspace files (recommended).<br />
+                <span className="text-xs text-[color:var(--ck-text-tertiary)]">
+                  Creates the team workspace + standard file tree immediately so the cloned team is usable.
+                </span>
+              </span>
+            </label>
+
             <div className="mt-6 flex items-center justify-end gap-2">
               <button
                 type="button"
@@ -96,7 +112,7 @@ export function CloneTeamModal({
               <button
                 type="button"
                 disabled={!name.trim() || !effectiveId.trim() || availability.state === "taken"}
-                onClick={() => onConfirm({ id: effectiveId.trim(), name: name.trim() })}
+                onClick={() => onConfirm({ id: effectiveId.trim(), name: name.trim(), scaffold })}
                 className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] hover:bg-[var(--ck-accent-red-hover)] disabled:opacity-50"
               >
                 Clone
