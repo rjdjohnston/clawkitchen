@@ -78,11 +78,16 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
   const teamRecipes = useMemo(() => recipes.filter((r) => r.kind === "team"), [recipes]);
 
-  const toRecipe = useMemo(() => recipes.find((r) => r.id === toId) ?? null, [recipes, toId]);
+  const toRecipe = useMemo(() => {
+    // Prefer the workspace recipe when both builtin + workspace exist for the same id.
+    const ws = recipes.find((r) => r.id === toId && r.source === "workspace");
+    return ws ?? recipes.find((r) => r.id === toId) ?? null;
+  }, [recipes, toId]);
 
   const teamIdValid = Boolean(teamId.trim());
   const targetIdValid = Boolean(toId.trim());
-  const targetIsBuiltin = toRecipe?.source === "builtin";
+  const hasWorkspaceOverride = recipes.some((r) => r.id === toId && r.source === "workspace");
+  const targetIsBuiltin = Boolean(toRecipe?.source === "builtin" && !hasWorkspaceOverride);
   // The "Recipe id" field is the workspace recipe id target.
   // It should be editable, and we must not auto-prefix/modify what the user types.
   const canEditTargetId = true;
@@ -145,7 +150,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         // Load ancillary data for sub-areas.
         const [filesRes, cronRes, agentsRes, skillsRes] = await Promise.all([
           fetch(`/api/teams/files?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" }),
-          fetch("/api/cron/jobs", { cache: "no-store" }),
+          fetch(`/api/cron/jobs?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" }),
           fetch("/api/agents", { cache: "no-store" }),
           fetch(`/api/teams/skills?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" }),
         ]);
@@ -169,8 +174,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         const cronJson = (await cronRes.json()) as { ok?: boolean; jobs?: unknown[] };
         if (cronRes.ok && cronJson.ok) {
           const all = Array.isArray(cronJson.jobs) ? cronJson.jobs : [];
-          const filtered = all.filter((j) => String((j as { name?: unknown }).name ?? "").includes(teamId));
-          setCronJobs(filtered);
+          setCronJobs(all);
         }
 
         const agentsJson = (await agentsRes.json()) as { agents?: unknown[] };
@@ -220,11 +224,12 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
     }
   }
 
-  async function ensureCustomRecipeExists(args: { overwrite: boolean; toId?: string; toName?: string }) {
+  async function ensureCustomRecipeExists(args: { overwrite: boolean; toId?: string; toName?: string; scaffold?: boolean }) {
     const f = fromId.trim();
     const id = String(args.toId ?? toId).trim();
     const name = String(args.toName ?? toName).trim();
     const overwrite = Boolean(args.overwrite);
+    const scaffold = Boolean(args.scaffold);
 
     if (!f) throw new Error("Source recipe id is required");
     if (!id) throw new Error("Custom recipe id is required");
@@ -232,18 +237,22 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
     const res = await fetch("/api/recipes/clone", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ fromId: f, toId: id, toName: name || undefined, overwrite }),
+      body: JSON.stringify({ fromId: f, toId: id, toName: name || undefined, overwrite, scaffold }),
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Save failed");
-    return json as { filePath: string; content: string };
+    return json as { filePath: string; content: string; scaffold?: { ok: boolean; error?: string } | null };
   }
 
-  async function onSaveCustom(overwrite: boolean, overrides?: { toId?: string; toName?: string }) {
+  async function onSaveCustom(overwrite: boolean, overrides?: { toId?: string; toName?: string; scaffold?: boolean }) {
     setSaving(true);
     flashMessage("");
     try {
       const json = await ensureCustomRecipeExists({ overwrite, ...overrides });
+
+      if (json.scaffold && !json.scaffold.ok) {
+        flashMessage(`Scaffold failed (recipe was still cloned): ${json.scaffold.error || "Unknown error"}`, "error");
+      }
 
       // If the user has edited the markdown, "Save (overwrite)" should persist both
       // the updated name (frontmatter) and the edited markdown.
@@ -565,7 +574,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         <div className="mt-6 ck-glass-strong p-4">
           <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Installed skills (team workspace)</div>
           <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-[color:var(--ck-text-secondary)]">
-            {skillsList.length ? skillsList.map((s) => <li key={s}>{s}</li>) : <li>None detected (or skills dir missing).</li>}
+            {skillsList.length ? skillsList.map((s) => <li key={s}>{s}</li>) : <li>No skills installed.</li>}
           </ul>
         </div>
       ) : null}
@@ -728,13 +737,13 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         open={cloneOpen}
         onClose={() => setCloneOpen(false)}
         recipes={recipes}
-        onConfirm={async ({ id, name }) => {
+        onConfirm={async ({ id, name, scaffold }) => {
           setCloneOpen(false);
           // Set the target fields for UI, but DO NOT rely on them for the clone.
           // Clone must use the modal-provided id/name.
           setToId(id);
           setToName(name);
-          await onSaveCustom(false, { toId: id, toName: name });
+          await onSaveCustom(false, { toId: id, toName: name, scaffold });
         }}
       />
 

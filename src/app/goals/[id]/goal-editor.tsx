@@ -113,6 +113,9 @@ export default function GoalEditor({ goalId }: { goalId: string }) {
     const g = data.goal as Goal;
     setUpdatedAt(g.updatedAt ?? null);
     setSaving(false);
+
+    // Save should behave like an editor "submit": return to the list.
+    router.push("/goals");
   }
 
   async function promoteToInbox() {

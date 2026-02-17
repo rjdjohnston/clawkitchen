@@ -85,6 +85,46 @@ export default function GoalsClient() {
     return list.filter((g) => g.status === filterStatus);
   }, [goals, filterStatus, teamFilter]);
 
+  const counts = useMemo(() => {
+    const list = goals ?? [];
+    const c = { all: list.length, active: 0, planned: 0, done: 0 };
+    for (const g of list) {
+      if (g.status === "active") c.active += 1;
+      else if (g.status === "done") c.done += 1;
+      else c.planned += 1;
+    }
+    return c;
+  }, [goals]);
+
+  function renderGoal(g: Goal) {
+    return (
+      <Link
+        key={g.id}
+        href={`/goals/${encodeURIComponent(g.id)}`}
+        className="block ck-glass p-5 transition hover:bg-[color:var(--ck-bg-glass)]"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-base font-semibold text-[color:var(--ck-text-primary)]">{g.title}</div>
+            <div className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">
+              <span className="font-mono">{g.id}</span>
+              {g.updatedAt ? ` • updated ${new Date(g.updatedAt).toLocaleString()}` : ""}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge>{g.status}</Badge>
+            {g.teams?.slice(0, 3).map((t) => (
+              <Badge key={t}>{t}</Badge>
+            ))}
+            {g.tags?.slice(0, 3).map((t) => (
+              <Badge key={t}>#{t}</Badge>
+            ))}
+          </div>
+        </div>
+      </Link>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -115,10 +155,10 @@ export default function GoalsClient() {
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
           >
-            <option value="all">All</option>
-            <option value="planned">Planned</option>
-            <option value="active">Active</option>
-            <option value="done">Done</option>
+            <option value="all">All ({counts.all})</option>
+            <option value="active">Active ({counts.active})</option>
+            <option value="planned">Planned ({counts.planned})</option>
+            <option value="done">Done ({counts.done})</option>
           </select>
 
           <button
@@ -145,34 +185,24 @@ export default function GoalsClient() {
             </Link>
           </div>
         </div>
+      ) : filterStatus !== "all" ? (
+        <div className="space-y-3">{filtered.map(renderGoal)}</div>
       ) : (
-        <div className="space-y-3">
-          {filtered.map((g) => (
-            <Link
-              key={g.id}
-              href={`/goals/${encodeURIComponent(g.id)}`}
-              className="block ck-glass p-5 transition hover:bg-[color:var(--ck-bg-glass)]"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-base font-semibold text-[color:var(--ck-text-primary)]">{g.title}</div>
-                  <div className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">
-                    <span className="font-mono">{g.id}</span>
-                    {g.updatedAt ? ` • updated ${new Date(g.updatedAt).toLocaleString()}` : ""}
-                  </div>
+        <div className="space-y-8">
+          {(["active", "planned", "done"] as const).map((status) => {
+            const section = filtered.filter((g) => g.status === status);
+            if (!section.length) return null;
+            return (
+              <section key={status}>
+                <div className="mb-2 flex items-end justify-between">
+                  <h2 className="text-sm font-semibold tracking-wide text-[color:var(--ck-text-secondary)] uppercase">
+                    {status} ({section.length})
+                  </h2>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge>{g.status}</Badge>
-                  {g.teams?.slice(0, 3).map((t) => (
-                    <Badge key={t}>{t}</Badge>
-                  ))}
-                  {g.tags?.slice(0, 3).map((t) => (
-                    <Badge key={t}>#{t}</Badge>
-                  ))}
-                </div>
-              </div>
-            </Link>
-          ))}
+                <div className="space-y-3">{section.map(renderGoal)}</div>
+              </section>
+            );
+          })}
         </div>
       )}
     </div>

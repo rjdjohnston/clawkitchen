@@ -11,11 +11,11 @@ export async function GET() {
   try {
     data = JSON.parse(stdout);
   } catch {
-    return NextResponse.json(
-      { error: "Failed to parse openclaw recipes list output", stderr, stdout },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to parse openclaw recipes list output", stderr, stdout }, { status: 500 });
   }
 
-  return NextResponse.json({ recipes: data, stderr });
+  // NOTE: We intentionally return the full list here. openclaw can return both builtin + workspace
+  // entries for the same (kind,id). The UI can decide which to prefer depending on context.
+  const list = Array.isArray(data) ? data : [];
+  return NextResponse.json({ recipes: list, stderr });
 }
