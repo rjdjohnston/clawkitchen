@@ -23,8 +23,23 @@ async function getRecipes(): Promise<{ recipes: Recipe[]; error: string | null }
   }
 }
 
+async function getAgents(): Promise<{ agentIds: string[]; error: string | null }> {
+  const res = await runOpenClaw(["agents", "list", "--json"]);
+  if (!res.ok) {
+    const err = res.stderr.trim() || `openclaw agents list failed (exit=${res.exitCode})`;
+    return { agentIds: [], error: err };
+  }
+  try {
+    const items = JSON.parse(res.stdout) as Array<{ id?: unknown }>;
+    const agentIds = Array.isArray(items) ? items.map((a) => String(a.id ?? "")).filter(Boolean) : [];
+    return { agentIds, error: null };
+  } catch {
+    return { agentIds: [], error: "Failed to parse openclaw agents list output" };
+  }
+}
+
 export default async function RecipesPage() {
-  const { recipes, error } = await getRecipes();
+  const [{ recipes, error }, { agentIds }] = await Promise.all([getRecipes(), getAgents()]);
 
   const builtin = recipes.filter((r) => r.source === "builtin");
   const workspace = recipes.filter((r) => r.source === "workspace");
@@ -57,7 +72,12 @@ export default async function RecipesPage() {
         </div>
       ) : null}
 
-      <RecipesClient builtin={builtin} customTeamRecipes={customTeamRecipes} customAgentRecipes={customAgentRecipes} />
+      <RecipesClient
+        builtin={builtin}
+        customTeamRecipes={customTeamRecipes}
+        customAgentRecipes={customAgentRecipes}
+        installedAgentIds={agentIds}
+      />
 
       <p className="mt-10 text-xs text-[color:var(--ck-text-tertiary)]">
         Note: editing builtin recipes will modify the recipes plugin install path on this machine.

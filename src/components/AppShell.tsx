@@ -37,6 +37,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <nav className="hidden items-center gap-1 sm:flex">
               <NavLink href="/recipes" label="Recipes" />
               <NavLink href="/tickets" label="Tickets" />
+              <NavLink href="/goals" label="Goals" />
+              <NavLink href="/channels" label="Channels" />
               <NavLink href="/cron-jobs" label="Cron jobs" />
               <NavLink href="/settings" label="Settings" />
             </nav>

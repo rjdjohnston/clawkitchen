@@ -22,19 +22,18 @@ async function getAgents(): Promise<AgentListItem[]> {
   return JSON.parse(res.stdout) as AgentListItem[];
 }
 
-async function getTeamsFromRecipes(): Promise<{ teamNames: Record<string, string>; customTeams: Array<{ teamId: string; name: string; recipeId: string }> }> {
+async function getTeamsFromRecipes(): Promise<{ teamNames: Record<string, string> }> {
   const res = await runOpenClaw(["recipes", "list"]);
-  if (!res.ok) return { teamNames: {}, customTeams: [] };
+  if (!res.ok) return { teamNames: {} };
 
   let items: RecipeListItem[] = [];
   try {
     items = JSON.parse(res.stdout) as RecipeListItem[];
   } catch {
-    return { teamNames: {}, customTeams: [] };
+    return { teamNames: {} };
   }
 
   const teamNames: Record<string, string> = {};
-  const customTeams: Array<{ teamId: string; name: string; recipeId: string }> = [];
 
   for (const r of items) {
     if (r.kind !== "team") continue;
@@ -43,19 +42,12 @@ async function getTeamsFromRecipes(): Promise<{ teamNames: Record<string, string
 
     teamNames[r.id] = name;
 
-    // Custom teams: workspace team recipes that start with custom-.
-    if (r.source === "workspace" && r.id.startsWith("custom-")) {
-      const teamId = r.id.slice("custom-".length);
-      customTeams.push({ teamId, name, recipeId: r.id });
-    }
   }
 
-  customTeams.sort((a, b) => a.teamId.localeCompare(b.teamId));
-
-  return { teamNames, customTeams };
+  return { teamNames };
 }
 
 export default async function Home() {
-  const [agents, { teamNames, customTeams }] = await Promise.all([getAgents(), getTeamsFromRecipes()]);
-  return <HomeClient agents={agents} teamNames={teamNames} customTeams={customTeams} />;
+  const [agents, { teamNames }] = await Promise.all([getAgents(), getTeamsFromRecipes()]);
+  return <HomeClient agents={agents} teamNames={teamNames} />;
 }

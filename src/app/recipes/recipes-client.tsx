@@ -12,44 +12,81 @@ type Recipe = {
   source: "builtin" | "workspace";
 };
 
-function RecipesSection({ title, items, onDelete }: { title: string; items: Recipe[]; onDelete?: (id: string) => void }) {
+function RecipesSection({
+  title,
+  items,
+  onDelete,
+  installedAgentIds,
+}: {
+  title: string;
+  items: Recipe[];
+  onDelete?: (id: string) => void;
+  installedAgentIds: string[];
+}) {
   return (
-    <section className="mt-8">
+    <section>
       <h2 className="text-lg font-semibold tracking-tight text-[color:var(--ck-text-primary)]">{title}</h2>
-      <ul className="mt-3 space-y-3">
-        {items.map((r) => (
-          <li key={`${r.source}:${r.id}`} className="ck-glass flex items-center justify-between gap-4 px-4 py-3">
-            <div className="min-w-0">
-              <div className="truncate font-medium">{r.name}</div>
-              <div className="mt-0.5 text-xs text-[color:var(--ck-text-secondary)]">
-                {r.id} • {r.kind} • {r.source}
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Link
-                className="shrink-0 rounded-[var(--ck-radius-sm)] px-3 py-1.5 text-sm font-medium text-[color:var(--ck-accent-red)] transition-colors hover:text-[color:var(--ck-accent-red-hover)]"
-                href={`/recipes/${r.id}`}
+
+      {items.length === 0 ? (
+        <div className="mt-3 ck-glass px-4 py-3 text-sm text-[color:var(--ck-text-secondary)]">None yet.</div>
+      ) : (
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {items.map((r) => {
+            const isInstalledAgent = r.kind === "agent" && installedAgentIds.includes(r.id);
+            const editHref = isInstalledAgent
+              ? `/agents/${encodeURIComponent(r.id)}`
+              : `/recipes/${encodeURIComponent(r.id)}`;
+            const editLabel = isInstalledAgent ? "Edit agent" : "Edit recipe";
+
+            return (
+              <div
+                key={`${r.source}:${r.id}`}
+                className="ck-glass flex items-start justify-between gap-4 px-4 py-3"
               >
-                Edit
-              </Link>
-              {onDelete ? (
-                <button
-                  type="button"
-                  onClick={() => onDelete(r.id)}
-                  className="shrink-0 rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
-                >
-                  Delete
-                </button>
-              ) : null}
-            </div>
-          </li>
-        ))}
-      </ul>
+                <div className="min-w-0">
+                  <div className="truncate font-medium text-[color:var(--ck-text-primary)]">{r.name}</div>
+                  <div className="mt-1 truncate text-xs text-[color:var(--ck-text-secondary)]">
+                    <span className="font-mono">{r.id}</span> • {r.kind} • {r.source}
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2">
+                  <Link
+                    className="rounded-[var(--ck-radius-sm)] px-3 py-1.5 text-sm font-medium text-[color:var(--ck-accent-red)] transition-colors hover:text-[color:var(--ck-accent-red-hover)]"
+                    href={editHref}
+                  >
+                    {editLabel}
+                  </Link>
+                  {onDelete ? (
+                    <button
+                      type="button"
+                      onClick={() => onDelete(r.id)}
+                      className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+                    >
+                      Delete
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
 
-export default function RecipesClient({ builtin, customTeamRecipes, customAgentRecipes }: { builtin: Recipe[]; customTeamRecipes: Recipe[]; customAgentRecipes: Recipe[] }) {
+export default function RecipesClient({
+  builtin,
+  customTeamRecipes,
+  customAgentRecipes,
+  installedAgentIds,
+}: {
+  builtin: Recipe[];
+  customTeamRecipes: Recipe[];
+  customAgentRecipes: Recipe[];
+  installedAgentIds: string[];
+}) {
   const toast = useToast();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string>("");
@@ -82,7 +119,6 @@ export default function RecipesClient({ builtin, customTeamRecipes, customAgentR
       }
       toast.push({ kind: "success", message: `Deleted recipe: ${deleteId}` });
       setDeleteOpen(false);
-      // simplest refresh
       window.location.reload();
     } catch (e: unknown) {
       toast.push({ kind: "error", message: e instanceof Error ? e.message : String(e) });
@@ -93,9 +129,42 @@ export default function RecipesClient({ builtin, customTeamRecipes, customAgentR
 
   return (
     <>
-      <RecipesSection title={`Builtin (${builtin.length})`} items={builtin} />
-      <RecipesSection title={`Custom recipes — Teams (${customTeamRecipes.length})`} items={customTeamRecipes} onDelete={onDelete} />
-      <RecipesSection title={`Custom recipes — Agents (${customAgentRecipes.length})`} items={customAgentRecipes} onDelete={onDelete} />
+      <div className="mt-8 space-y-10">
+        <section>
+          <h2 className="text-xl font-semibold tracking-tight text-[color:var(--ck-text-primary)]">Custom recipes</h2>
+          <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
+            Workspace recipes (editable) — stored under <code className="font-mono">~/.openclaw/workspace/recipes/</code>.
+          </p>
+
+          <div className="mt-4 space-y-8">
+            <RecipesSection
+              title={`Teams (${customTeamRecipes.length})`}
+              items={customTeamRecipes}
+              onDelete={onDelete}
+              installedAgentIds={installedAgentIds}
+            />
+            <RecipesSection
+              title={`Agents (${customAgentRecipes.length})`}
+              items={customAgentRecipes}
+              onDelete={onDelete}
+              installedAgentIds={installedAgentIds}
+            />
+          </div>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold tracking-tight text-[color:var(--ck-text-primary)]">Builtin recipes</h2>
+          <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">Bundled recipes shipped with the plugin.</p>
+
+          <div className="mt-4">
+            <RecipesSection
+              title={`All (${builtin.length})`}
+              items={builtin}
+              installedAgentIds={installedAgentIds}
+            />
+          </div>
+        </section>
+      </div>
 
       <DeleteRecipeModal
         open={deleteOpen}

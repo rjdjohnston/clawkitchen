@@ -1,7 +1,11 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
+
 import { NextResponse } from "next/server";
-import { gatewayConfigGet, gatewayConfigPatch } from "@/lib/gateway";
+
+const execFileAsync = promisify(execFile);
 
 function normalizeAgentId(id: string) {
   const s = id.trim();
@@ -28,7 +32,12 @@ export async function POST(req: Request) {
     const newAgentId = normalizeAgentId(String(body.newAgentId ?? body.agentId ?? ""));
     const overwrite = Boolean(body.overwrite);
 
-    const { raw } = await gatewayConfigGet();
+    const configPath = path.join(process.env.HOME || "", ".openclaw", "openclaw.json");
+    if (!process.env.HOME) {
+      return NextResponse.json({ ok: false, error: "HOME is not set" }, { status: 500 });
+    }
+
+    const raw = await fs.readFile(configPath, "utf8");
     const cfg = JSON.parse(raw) as {
       agents?: { defaults?: { workspace?: string }; list?: Array<Record<string, unknown>> };
     };
@@ -69,9 +78,26 @@ export async function POST(req: Request) {
   const identityMd = `# IDENTITY.md\n\n- **Name:** ${String(body.name ?? "").trim() || newAgentId}\n- **Creature:**\n- **Vibe:**\n- **Emoji:** ${String(body.emoji ?? "").trim()}\n- **Avatar:** ${String(body.avatar ?? "").trim()}\n`;
   await fs.writeFile(path.join(newWorkspace, "IDENTITY.md"), identityMd, "utf8");
 
-  await gatewayConfigPatch({ agents: { list: nextList } }, `ClawKitchen: add agent ${newAgentId}`);
+  // Persist to ~/.openclaw/openclaw.json
+  const nextCfg = {
+    ...cfg,
+    agents: {
+      ...(cfg.agents ?? {}),
+      list: nextList,
+    },
+  };
 
-  return NextResponse.json({ ok: true, agentId: newAgentId, workspace: newWorkspace });
+  // Write atomically.
+  const tmpPath = `${configPath}.tmp`;
+  const bakPath = `${configPath}.bak.${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  await fs.writeFile(tmpPath, JSON.stringify(nextCfg, null, 2) + "\n", "utf8");
+  await fs.copyFile(configPath, bakPath).catch(() => {});
+  await fs.rename(tmpPath, configPath);
+
+  // Restart gateway so the new agent is live.
+  await execFileAsync("openclaw", ["gateway", "restart"], { timeout: 120000 });
+
+  return NextResponse.json({ ok: true, agentId: newAgentId, workspace: newWorkspace, restarted: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // Prefer 400 for validation/input errors; otherwise 500.
