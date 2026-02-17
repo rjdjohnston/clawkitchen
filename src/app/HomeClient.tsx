@@ -27,11 +27,9 @@ function normalizeTeamId(teamId: string) {
 export default function HomeClient({
   agents,
   teamNames,
-  customTeams,
 }: {
   agents: AgentListItem[];
   teamNames: Record<string, string>;
-  customTeams: Array<{ teamId: string; name: string; recipeId: string }>;
 }) {
   const teamIds = useMemo(() => {
     const s = new Set<string>();
@@ -153,27 +151,7 @@ export default function HomeClient({
         </div>
       ) : null}
 
-      {customTeams.length ? (
-        <section className="mt-8">
-          <h2 className="text-lg font-semibold tracking-tight text-[color:var(--ck-text-primary)]">Teams</h2>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {customTeams.map((t) => (
-              <Link
-                key={t.teamId}
-                href={`/teams/${encodeURIComponent(t.teamId)}`}
-                className="ck-glass block px-4 py-3 transition-colors hover:bg-[color:var(--ck-bg-glass-strong)]"
-              >
-                <div className="truncate font-medium text-[color:var(--ck-text-primary)]">{t.name}</div>
-                <div className="mt-1 truncate text-xs text-[color:var(--ck-text-secondary)]">{t.teamId}</div>
-                <div className="mt-1 truncate text-xs text-[color:var(--ck-text-tertiary)]">Recipe: {t.recipeId}</div>
-              </Link>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-[color:var(--ck-text-tertiary)]">
-            Teams appear here when you have a workspace custom team recipe (custom-*), even before you scaffold the team.
-          </p>
-        </section>
-      ) : null}
+      
 
       <div className="mt-8 space-y-8">
         {grouped.map((g) => (

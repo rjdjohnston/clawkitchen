@@ -220,27 +220,30 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
     }
   }
 
-  async function ensureCustomRecipeExists(overwrite: boolean) {
+  async function ensureCustomRecipeExists(args: { overwrite: boolean; toId?: string; toName?: string }) {
     const f = fromId.trim();
-    const id = toId.trim();
+    const id = String(args.toId ?? toId).trim();
+    const name = String(args.toName ?? toName).trim();
+    const overwrite = Boolean(args.overwrite);
+
     if (!f) throw new Error("Source recipe id is required");
     if (!id) throw new Error("Custom recipe id is required");
 
     const res = await fetch("/api/recipes/clone", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ fromId: f, toId: id, toName: toName.trim() || undefined, overwrite }),
+      body: JSON.stringify({ fromId: f, toId: id, toName: name || undefined, overwrite }),
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Save failed");
     return json as { filePath: string; content: string };
   }
 
-  async function onSaveCustom(overwrite: boolean) {
+  async function onSaveCustom(overwrite: boolean, overrides?: { toId?: string; toName?: string }) {
     setSaving(true);
     flashMessage("");
     try {
-      const json = await ensureCustomRecipeExists(overwrite);
+      const json = await ensureCustomRecipeExists({ overwrite, ...overrides });
 
       // If the user has edited the markdown, "Save (overwrite)" should persist both
       // the updated name (frontmatter) and the edited markdown.
@@ -311,8 +314,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
     <div className="ck-glass mx-auto max-w-6xl p-6 sm:p-8">
       <h1 className="text-2xl font-semibold tracking-tight">Team editor</h1>
       <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
-        Phase v2 (thin slice): bootstrap a <strong>custom team recipe</strong> for this installed team, without
-        modifying builtin recipes.
+        Bootstrap a <strong>custom team recipe</strong> for this installed team, without modifying builtin recipes.
       </p>
 
       <div className="mt-6 flex flex-wrap gap-2">
@@ -484,7 +486,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
               onClick={async () => {
                 setSaving(true);
                                 try {
-                  await ensureCustomRecipeExists(false);
+                  await ensureCustomRecipeExists({ overwrite: false });
                   const res = await fetch("/api/recipes/team-agents", {
                     method: "POST",
                     headers: { "content-type": "application/json" },
@@ -509,7 +511,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
               onClick={async () => {
                 setSaving(true);
                                 try {
-                  await ensureCustomRecipeExists(false);
+                  await ensureCustomRecipeExists({ overwrite: false });
                   const res = await fetch("/api/recipes/team-agents", {
                     method: "POST",
                     headers: { "content-type": "application/json" },
@@ -728,11 +730,11 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         recipes={recipes}
         onConfirm={async ({ id, name }) => {
           setCloneOpen(false);
-          // Set the target fields, then execute the clone (create-only) save.
+          // Set the target fields for UI, but DO NOT rely on them for the clone.
+          // Clone must use the modal-provided id/name.
           setToId(id);
           setToName(name);
-          // Ensure we run after state updates apply.
-          setTimeout(() => onSaveCustom(false), 0);
+          await onSaveCustom(false, { toId: id, toName: name });
         }}
       />
 
