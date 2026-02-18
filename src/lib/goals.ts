@@ -5,6 +5,11 @@ import { getWorkspaceGoalsDir } from "@/lib/paths";
 
 export type GoalStatus = "planned" | "active" | "done";
 
+/** Parses comma-separated string into trimmed non-empty array. */
+export function parseCommaList(raw: string): string[] {
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 export type GoalFrontmatter = {
   id: string;
   title: string;

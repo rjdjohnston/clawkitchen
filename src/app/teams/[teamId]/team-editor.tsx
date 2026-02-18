@@ -7,6 +7,7 @@ import { cronJobId, cronJobLabel, type CronJobShape } from "@/lib/cron";
 import { type FileListEntry, normalizeFileListEntries } from "@/lib/editor-utils";
 import { errorMessage } from "@/lib/errors";
 import { forceFrontmatterId, type RecipeDetail, type RecipeListItem } from "@/lib/recipes";
+import { WorkspaceFileListSidebar } from "@/components/WorkspaceFileListSidebar";
 import { CloneTeamModal } from "./CloneTeamModal";
 import { DeleteTeamModal } from "./DeleteTeamModal";
 import { useToast } from "@/components/ToastProvider";
@@ -20,13 +21,32 @@ function getTabButtonClass(activeTab: string, tabId: string): string {
   return `${base} border border-white/10 bg-white/5 text-[color:var(--ck-text-primary)] hover:bg-white/10`;
 }
 
-function getFileButtonClass(fileName: string, fName: string): string {
-  const isSelected = fileName === fName;
-  const base = "w-full rounded-[var(--ck-radius-sm)] px-3 py-2 text-left text-sm";
-  if (isSelected) {
-    return `${base} bg-white/10 text-[color:var(--ck-text-primary)]`;
+async function updateTeamAgents(
+  body: { recipeId: string; op: "add" | "remove"; role: string; name?: string },
+  successMsg: string,
+  ensureRecipe: () => Promise<void>,
+  currentContent: string,
+  setContent: (c: string) => void,
+  flashMessage: (msg: string, type: "success" | "error") => void,
+  setSaving: (v: boolean) => void
+) {
+  setSaving(true);
+  try {
+    await ensureRecipe();
+    const res = await fetch("/api/recipes/team-agents", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.ok) throw new Error((json as { error?: string }).error || "Failed updating agents list");
+    setContent(String((json as { content?: string }).content ?? currentContent));
+    flashMessage(successMsg, "success");
+  } catch (e: unknown) {
+    flashMessage(errorMessage(e), "error");
+  } finally {
+    setSaving(false);
   }
-  return `${base} text-[color:var(--ck-text-secondary)] hover:bg-white/5`;
 }
 
 function applyLockedOrFallback(
@@ -552,50 +572,34 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               disabled={saving}
-              onClick={async () => {
-                setSaving(true);
-                                try {
-                  await ensureCustomRecipeExists({ overwrite: false });
-                  const res = await fetch("/api/recipes/team-agents", {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ recipeId: toId.trim(), op: "add", role: newRole, name: newRoleName }),
-                  });
-                  const json = await res.json();
-                  if (!res.ok || !json.ok) throw new Error(json.error || "Failed updating agents list");
-                  setContent(String(json.content ?? content));
-                  flashMessage(`Updated agents list in ${toId}`, "success");
-                } catch (e: unknown) {
-                  flashMessage(errorMessage(e), "error");
-                } finally {
-                  setSaving(false);
-                }
-              }}
+              onClick={() =>
+                updateTeamAgents(
+                  { recipeId: toId.trim(), op: "add", role: newRole, name: newRoleName },
+                  `Updated agents list in ${toId}`,
+                  () => ensureCustomRecipeExists({ overwrite: false }),
+                  content,
+                  setContent,
+                  flashMessage,
+                  setSaving
+                )
+              }
               className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
             >
               Add / Update role
             </button>
             <button
               disabled={saving}
-              onClick={async () => {
-                setSaving(true);
-                                try {
-                  await ensureCustomRecipeExists({ overwrite: false });
-                  const res = await fetch("/api/recipes/team-agents", {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ recipeId: toId.trim(), op: "remove", role: newRole }),
-                  });
-                  const json = await res.json();
-                  if (!res.ok || !json.ok) throw new Error(json.error || "Failed updating agents list");
-                  setContent(String(json.content ?? content));
-                  flashMessage(`Removed role ${newRole} from ${toId}`, "success");
-                } catch (e: unknown) {
-                  flashMessage(errorMessage(e), "error");
-                } finally {
-                  setSaving(false);
-                }
-              }}
+              onClick={() =>
+                updateTeamAgents(
+                  { recipeId: toId.trim(), op: "remove", role: newRole },
+                  `Removed role ${newRole} from ${toId}`,
+                  () => ensureCustomRecipeExists({ overwrite: false }),
+                  content,
+                  setContent,
+                  flashMessage,
+                  setSaving
+                )
+              }
               className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-white/10 disabled:opacity-50"
             >
               Remove role
@@ -662,42 +666,14 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
       {activeTab === "files" ? (
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="ck-glass-strong p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Team files</div>
-              <label className="flex items-center gap-2 text-xs text-[color:var(--ck-text-secondary)]">
-                <input
-                  type="checkbox"
-                  checked={showOptionalFiles}
-                  onChange={(e) => setShowOptionalFiles(e.target.checked)}
-                />
-                Show optional
-              </label>
-            </div>
-            <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
-              Default view hides optional missing files to reduce noise.
-            </div>
-            <ul className="mt-3 space-y-1">
-              {teamFiles
-                .filter((f) => (showOptionalFiles ? true : f.required || !f.missing))
-                .map((f) => (
-                <li key={f.name}>
-                  <button
-                    onClick={() => onLoadTeamFile(f.name)}
-                    className={getFileButtonClass(fileName, f.name)}
-                  >
-                    <span className={f.required ? "text-[color:var(--ck-text-primary)]" : "text-[color:var(--ck-text-secondary)]"}>
-                      {f.name}
-                    </span>
-                    <span className="ml-2 text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">
-                      {f.required ? "required" : "optional"}
-                    </span>
-                    {f.missing ? <span className="ml-2 text-xs text-[color:var(--ck-text-tertiary)]">missing</span> : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <WorkspaceFileListSidebar
+            title="Team files"
+            files={teamFiles}
+            selectedFileName={fileName}
+            onSelectFile={onLoadTeamFile}
+            showOptionalFiles={showOptionalFiles}
+            setShowOptionalFiles={setShowOptionalFiles}
+          />
 
           <div className="ck-glass-strong p-4 lg:col-span-2">
             <div className="flex items-center justify-between gap-3">

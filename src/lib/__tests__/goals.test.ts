@@ -10,6 +10,7 @@ import {
   writeGoal,
   deleteGoal,
   goalErrorStatus,
+  parseCommaList,
 } from "../goals";
 import { getWorkspaceGoalsDir } from "@/lib/paths";
 
@@ -42,6 +43,17 @@ describe("goals", () => {
       expect(() => assertSafeGoalId("no spaces")).toThrow("Invalid goal id");
       expect(() => assertSafeGoalId("-leading")).toThrow("Invalid goal id");
       expect(() => assertSafeGoalId("a".repeat(65))).toThrow("Invalid goal id");
+    });
+  });
+
+  describe("parseCommaList", () => {
+    it("parses comma-separated values", () => {
+      expect(parseCommaList("a, b, c")).toEqual(["a", "b", "c"]);
+      expect(parseCommaList("development-team, marketing-team")).toEqual(["development-team", "marketing-team"]);
+    });
+    it("trims and filters empty", () => {
+      expect(parseCommaList("  a , , b  ")).toEqual(["a", "b"]);
+      expect(parseCommaList("")).toEqual([]);
     });
   });
 

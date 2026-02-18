@@ -7,10 +7,10 @@ const mockExecFileAsync = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/exec", () => ({
   execFileAsync: (...args: unknown[]) => mockExecFileAsync(...args),
 }));
-vi.mock("@/lib/goals", () => ({
-  readGoal: vi.fn(),
-  writeGoal: vi.fn(),
-}));
+vi.mock("@/lib/goals", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/goals")>();
+  return { ...actual, readGoal: vi.fn(), writeGoal: vi.fn() };
+});
 vi.mock("@/lib/paths", () => ({
   getTeamWorkspaceDir: vi.fn(),
   readOpenClawConfig: vi.fn(),
@@ -161,5 +161,44 @@ describe("api goals promote route", () => {
     expect(json.pingAttempted).toBe(true);
     expect(json.pingOk).toBe(false);
     expect(json.pingReason).toBe("Command failed");
+  });
+
+  it("uses alternate filename when EEXIST", async () => {
+    vi.mocked(readGoal).mockResolvedValue(existingGoal);
+    vi.mocked(writeGoal).mockResolvedValue({
+      frontmatter: existingGoal.frontmatter,
+      body: "",
+      raw: "",
+    });
+    vi.mocked(readOpenClawConfig).mockResolvedValue({});
+
+    const eexist = new Error("EEXIST") as Error & { code?: string };
+    eexist.code = "EEXIST";
+
+    vi.mocked(fs.writeFile)
+      .mockRejectedValueOnce(eexist)
+      .mockResolvedValueOnce(undefined);
+
+    const res = await POST(
+      new Request("https://test"),
+      { params: Promise.resolve({ id: "my-goal" }) }
+    );
+    expect(res.status).toBe(200);
+    expect(fs.writeFile).toHaveBeenCalledTimes(2);
+    const secondPath = (fs.writeFile as ReturnType<typeof vi.fn>).mock.calls[1][0];
+    expect(secondPath).toContain("-goal-");
+    expect(secondPath).toContain(".md");
+  });
+
+  it("returns 500 when readGoal throws", async () => {
+    vi.mocked(readGoal).mockRejectedValue(new Error("File system error"));
+
+    const res = await POST(
+      new Request("https://test"),
+      { params: Promise.resolve({ id: "my-goal" }) }
+    );
+    expect(res.status).toBe(500);
+    const json = (await res.json()) as { error?: string };
+    expect(json.error).toBe("File system error");
   });
 });

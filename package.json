@@ -11,6 +11,8 @@
     "test:run": "vitest run",
     "coverage": "vitest run --coverage",
     "check": "npm run lint && npm run test:run",
+    "dup:check": "jscpd src --min-tokens 50 --min-lines 10 --reporters html,console",
+    "refactor:report": "node scripts/refactor-report.mjs",
     "smoke:goals": "node scripts/goals-smoke.mjs",
     "prepare": "husky"
   },
@@ -33,6 +35,7 @@
     "eslint-config-next": "16.1.6",
     "eslint-plugin-sonarjs": "^4.0.0",
     "husky": "^9.1.7",
+    "jscpd": "^4.0.8",
     "jsdom": "^28.1.0",
     "lint-staged": "^16.2.7",
     "tailwindcss": "^4",

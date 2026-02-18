@@ -1,71 +1,13 @@
 "use client";
 
-import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
+import { ConfirmationModal } from "@/components/ConfirmationModal";
+import { WorkspaceFileListSidebar } from "@/components/WorkspaceFileListSidebar";
 import { type AgentListItem } from "@/lib/agents";
 import { type FileListEntry, normalizeFileListEntries } from "@/lib/editor-utils";
 import { errorMessage } from "@/lib/errors";
 
 type FileListResponse = { ok?: boolean; files?: unknown[] };
-
-function DeleteAgentModal({
-  open,
-  agentId,
-  busy,
-  error,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  agentId: string;
-  busy?: boolean;
-  error?: string | null;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  if (!open) return null;
-
-  return createPortal(
-    <div className="fixed inset-0 z-[200]">
-      <div className="fixed inset-0 bg-black/60" onClick={onClose} />
-      <div className="fixed inset-0 overflow-y-auto">
-        <div className="flex min-h-full items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[color:var(--ck-bg-glass-strong)] p-5 shadow-[var(--ck-shadow-2)]">
-            <div className="text-lg font-semibold text-[color:var(--ck-text-primary)]">Delete agent</div>
-            <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
-              Delete agent <code className="font-mono">{agentId}</code>? This will remove its workspace/state.
-            </p>
-
-            {error ? (
-              <div className="mt-4 rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">
-                {error}
-              </div>
-            ) : null}
-
-            <div className="mt-6 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onConfirm}
-                className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] hover:bg-[var(--ck-accent-red-hover)] disabled:opacity-50"
-              >
-                {busy ? "Deleting…" : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
-}
 
 /* eslint-disable sonarjs/cognitive-complexity -- component orchestrates many concerns; logic extracted to loadAgentData */
 export default function AgentEditor({ agentId }: { agentId: string }) {
@@ -443,46 +385,14 @@ export default function AgentEditor({ agentId }: { agentId: string }) {
 
         {activeTab === "files" ? (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="ck-glass-strong p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Agent files</div>
-                <label className="flex items-center gap-2 text-xs text-[color:var(--ck-text-secondary)]">
-                  <input
-                    type="checkbox"
-                    checked={showOptionalFiles}
-                    onChange={(e) => setShowOptionalFiles(e.target.checked)}
-                  />
-                  Show optional
-                </label>
-              </div>
-              <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
-                Default view hides optional missing files to reduce noise.
-              </div>
-              <ul className="mt-3 space-y-1">
-                {agentFiles
-                  .filter((f) => (showOptionalFiles ? true : Boolean(f.required) || !f.missing))
-                  .map((f) => (
-                  <li key={f.name}>
-                    <button
-                      onClick={() => onLoadAgentFile(f.name)}
-                      className={
-                        fileName === f.name
-                          ? "w-full rounded-[var(--ck-radius-sm)] bg-white/10 px-3 py-2 text-left text-sm text-[color:var(--ck-text-primary)]"
-                          : "w-full rounded-[var(--ck-radius-sm)] px-3 py-2 text-left text-sm text-[color:var(--ck-text-secondary)] hover:bg-white/5"
-                      }
-                    >
-                      <span className={f.required ? "text-[color:var(--ck-text-primary)]" : "text-[color:var(--ck-text-secondary)]"}>
-                        {f.name}
-                      </span>
-                      <span className="ml-2 text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">
-                        {f.required ? "required" : "optional"}
-                      </span>
-                      {f.missing ? <span className="ml-2 text-xs text-[color:var(--ck-text-tertiary)]">missing</span> : null}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <WorkspaceFileListSidebar
+              title="Agent files"
+              files={agentFiles}
+              selectedFileName={fileName}
+              onSelectFile={onLoadAgentFile}
+              showOptionalFiles={showOptionalFiles}
+              setShowOptionalFiles={setShowOptionalFiles}
+            />
 
             <div className="ck-glass-strong p-4 lg:col-span-2">
               <div className="flex items-center justify-between gap-3">
@@ -517,14 +427,20 @@ export default function AgentEditor({ agentId }: { agentId: string }) {
         ) : null}
       </div>
 
-      <DeleteAgentModal
+      <ConfirmationModal
         open={deleteOpen}
-        agentId={agentId}
+        onClose={() => setDeleteOpen(false)}
+        title="Delete agent"
+        confirmLabel="Delete"
+        confirmBusyLabel="Deleting…"
+        onConfirm={() => void onDeleteAgent()}
         busy={deleteBusy}
         error={deleteError}
-        onClose={() => setDeleteOpen(false)}
-        onConfirm={() => void onDeleteAgent()}
-      />
+      >
+        <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
+          Delete agent <code className="font-mono">{agentId}</code>? This will remove its workspace/state.
+        </p>
+      </ConfirmationModal>
     </div>
   );
 }
