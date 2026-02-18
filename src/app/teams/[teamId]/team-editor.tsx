@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type AgentListItem } from "@/lib/agents";
 import { cronJobId, cronJobLabel, type CronJobShape } from "@/lib/cron";
@@ -11,6 +11,8 @@ import { WorkspaceFileListSidebar } from "@/components/WorkspaceFileListSidebar"
 import { CloneTeamModal } from "./CloneTeamModal";
 import { DeleteTeamModal } from "./DeleteTeamModal";
 import { useToast } from "@/components/ToastProvider";
+
+type FlashKind = "success" | "error" | "info";
 
 function getTabButtonClass(activeTab: string, tabId: string): string {
   const isActive = activeTab === tabId;
@@ -133,6 +135,521 @@ async function loadAncillaryData(
   }
 }
 
+type TeamTabId = "recipe" | "agents" | "skills" | "cron" | "files";
+
+function RecipeTabContent({
+  toId,
+  setToId,
+  toName,
+  setToName,
+  canEditTargetId,
+  fromId,
+  setFromId,
+  teamRecipes,
+  lockedFromId,
+  lockedFromName,
+  provenanceMissing,
+  content,
+  setContent,
+  loadingSource,
+  targetIdValid,
+  targetIsBuiltin,
+  teamIdValid,
+  saving,
+  onLoadTeamRecipeMarkdown,
+  onSaveCustom,
+  setCloneNonce,
+  setCloneOpen,
+  setDeleteOpen,
+}: {
+  toId: string;
+  setToId: (v: string) => void;
+  toName: string;
+  setToName: (v: string) => void;
+  canEditTargetId: boolean;
+  fromId: string;
+  setFromId: (v: string) => void;
+  teamRecipes: RecipeListItem[];
+  lockedFromId: string | null;
+  lockedFromName: string | null;
+  provenanceMissing: boolean;
+  content: string;
+  setContent: (v: string) => void;
+  loadingSource: boolean;
+  targetIdValid: boolean;
+  targetIsBuiltin: boolean;
+  teamIdValid: boolean;
+  saving: boolean;
+  onLoadTeamRecipeMarkdown: () => void;
+  onSaveCustom: (overwrite: boolean) => void;
+  setCloneNonce: (fn: (n: number) => number) => void;
+  setCloneOpen: (v: boolean) => void;
+  setDeleteOpen: (v: boolean) => void;
+}) {
+  return (
+    <>
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="ck-glass-strong p-4">
+          <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Custom recipe target</div>
+          <label className="mt-3 block text-xs font-medium text-[color:var(--ck-text-secondary)]">Team id</label>
+          <input
+            value={toId}
+            onChange={(e) => setToId(e.target.value)}
+            disabled={!canEditTargetId}
+            className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)] disabled:opacity-70"
+          />
+          <div className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">
+            This is the <b>custom recipe id</b> that will be created/overwritten when you save.
+          </div>
+
+          <label className="mt-3 block text-xs font-medium text-[color:var(--ck-text-secondary)]">Team name</label>
+          <input
+            value={toName}
+            onChange={(e) => setToName(e.target.value)}
+            className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
+          />
+
+          <div className="mt-4 grid grid-cols-1 gap-2">
+            <button
+              type="button"
+              disabled={loadingSource || !targetIdValid || targetIsBuiltin}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void onLoadTeamRecipeMarkdown();
+              }}
+              className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-white/10 active:bg-white/15 disabled:opacity-60"
+            >
+              {loadingSource ? "Loading…" : "Load team markdown"}
+            </button>
+
+            <button
+              disabled={saving || !teamIdValid || !targetIdValid || targetIsBuiltin}
+              onClick={() => onSaveCustom(true)}
+              className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] transition-colors hover:bg-[var(--ck-accent-red-hover)] active:bg-[var(--ck-accent-red-active)] disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+
+            <button
+              disabled={saving || !teamIdValid || targetIsBuiltin}
+              onClick={() => {
+                setCloneNonce((n) => n + 1);
+                setCloneOpen(true);
+              }}
+              className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-white/10 active:bg-white/15 disabled:opacity-50"
+            >
+              Clone Team
+            </button>
+
+            <button
+              disabled={saving}
+              onClick={() => setDeleteOpen(true)}
+              className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-white/10 active:bg-white/15 disabled:opacity-50"
+            >
+              Delete Team
+            </button>
+          </div>
+        </div>
+
+        <div className="ck-glass-strong p-4">
+          <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Notes</div>
+
+          <div className="mt-3 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3">
+            <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Parent recipe (locked)</div>
+            <select
+              disabled
+              className="mt-2 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)] disabled:opacity-70"
+              value={fromId}
+              onChange={(e) => setFromId(e.target.value)}
+            >
+              {teamRecipes.map((r) => (
+                <option key={`${r.source}:${r.id}`} value={r.id}>
+                  {r.id} ({r.source})
+                </option>
+              ))}
+            </select>
+            {lockedFromId && (
+              <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
+                <code>{lockedFromId}</code>
+                {lockedFromName ? ` (${lockedFromName})` : ""}
+              </div>
+            )}
+            {!lockedFromId && provenanceMissing && (
+              <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
+                Provenance not found for this team. The parent recipe above is a best-guess.
+              </div>
+            )}
+          </div>
+
+          <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-[color:var(--ck-text-secondary)]">
+            <li>
+              <strong>Save</strong> writes/overwrites the custom recipe file identified by &quot;Team id&quot;.
+            </li>
+            <li>
+              <strong>Clone Team</strong> creates a new custom recipe copy (fails if it already exists).
+            </li>
+            <li>
+              <strong>Delete Team</strong> runs the safe uninstall command (<code>openclaw recipes remove-team</code>).
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="mt-6 ck-glass-strong p-4">
+        <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Recipe markdown</div>
+        <textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          className="mt-2 h-[55vh] w-full resize-none rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-3 font-mono text-xs text-[color:var(--ck-text-primary)]"
+          spellCheck={false}
+        />
+      </div>
+    </>
+  );
+}
+
+function AgentsTabContent({
+  toId,
+  newRole,
+  setNewRole,
+  newRoleName,
+  setNewRoleName,
+  teamAgents,
+  saving,
+  ensureCustomRecipeExists,
+  content,
+  setContent,
+  flashMessage,
+  setSaving,
+}: {
+  toId: string;
+  newRole: string;
+  setNewRole: (v: string) => void;
+  newRoleName: string;
+  setNewRoleName: (v: string) => void;
+  teamAgents: Pick<AgentListItem, "id" | "identityName">[];
+  saving: boolean;
+  ensureCustomRecipeExists: (args: { overwrite: boolean }) => Promise<unknown>;
+  content: string;
+  setContent: (v: string) => void;
+  flashMessage: (msg: string, kind?: FlashKind) => void;
+  setSaving: (v: boolean) => void;
+}) {
+  return (
+    <div className="mt-6 ck-glass-strong p-4">
+      <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Agents in this team</div>
+      <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
+        Thin slice: manage agents by editing the <code>agents:</code> list in your custom team recipe (<code>{toId}</code>).
+      </p>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div>
+          <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Role</label>
+          <input
+            value={newRole}
+            onChange={(e) => setNewRole(e.target.value)}
+            placeholder="lead"
+            className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Name (optional)</label>
+          <input
+            value={newRoleName}
+            onChange={(e) => setNewRoleName(e.target.value)}
+            placeholder="Dev Team Lead"
+            className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
+          />
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          disabled={saving}
+          onClick={() =>
+            updateTeamAgents(
+              { recipeId: toId.trim(), op: "add", role: newRole, name: newRoleName },
+              `Updated agents list in ${toId}`,
+              () => ensureCustomRecipeExists({ overwrite: false }),
+              content,
+              setContent,
+              flashMessage,
+              setSaving
+            )
+          }
+          className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
+        >
+          Add / Update role
+        </button>
+        <button
+          disabled={saving}
+          onClick={() =>
+            updateTeamAgents(
+              { recipeId: toId.trim(), op: "remove", role: newRole },
+              `Removed role ${newRole} from ${toId}`,
+              () => ensureCustomRecipeExists({ overwrite: false }),
+              content,
+              setContent,
+              flashMessage,
+              setSaving
+            )
+          }
+          className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-white/10 disabled:opacity-50"
+        >
+          Remove role
+        </button>
+      </div>
+
+      <div className="mt-6">
+        <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Detected installed team agents (read-only)</div>
+        <ul className="mt-2 space-y-2">
+          {teamAgents.length ? (
+            teamAgents.map((a) => (
+              <li key={a.id} className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-[color:var(--ck-text-primary)]">
+                    {a.identityName || a.id}
+                  </div>
+                  <div className="text-xs text-[color:var(--ck-text-secondary)]">{a.id}</div>
+                </div>
+                <a
+                  className="text-sm font-medium text-[color:var(--ck-accent-red)] hover:text-[color:var(--ck-accent-red-hover)]"
+                  href={`/agents/${encodeURIComponent(a.id)}`}
+                >
+                  Edit
+                </a>
+              </li>
+            ))
+          ) : (
+            <li className="text-sm text-[color:var(--ck-text-secondary)]">No team agents detected.</li>
+          )}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function SkillsTabContent({ skillsList }: { skillsList: string[] }) {
+  return (
+    <div className="mt-6 ck-glass-strong p-4">
+      <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Installed skills (team workspace)</div>
+      <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-[color:var(--ck-text-secondary)]">
+        {skillsList.length ? skillsList.map((s) => <li key={s}>{s}</li>) : <li>No skills installed.</li>}
+      </ul>
+    </div>
+  );
+}
+
+function CronTabContent({
+  cronJobs,
+  saving,
+  setSaving,
+  flashMessage,
+}: {
+  cronJobs: unknown[];
+  saving: boolean;
+  setSaving: (v: boolean) => void;
+  flashMessage: (msg: string, kind?: FlashKind) => void;
+}) {
+  return (
+    <div className="mt-6 ck-glass-strong p-4">
+      <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Cron jobs (filtered by team name)</div>
+      <ul className="mt-3 space-y-3">
+        {cronJobs.length ? (
+          cronJobs.map((j) => (
+            <CronJobListItem
+              key={cronJobId(j) || cronJobLabel(j) || "job"}
+              job={j}
+              saving={saving}
+              setSaving={setSaving}
+              flashMessage={flashMessage}
+            />
+          ))
+        ) : (
+          <li className="text-sm text-[color:var(--ck-text-secondary)]">No cron jobs detected for this team.</li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+function FilesTabContent({
+  teamFiles,
+  fileName,
+  fileContent,
+  setFileContent,
+  showOptionalFiles,
+  setShowOptionalFiles,
+  saving,
+  onLoadTeamFile,
+  onSaveTeamFile,
+}: {
+  teamFiles: FileListEntry[];
+  fileName: string;
+  fileContent: string;
+  setFileContent: (v: string) => void;
+  showOptionalFiles: boolean;
+  setShowOptionalFiles: (v: boolean) => void;
+  saving: boolean;
+  onLoadTeamFile: (name: string) => void;
+  onSaveTeamFile: () => void;
+}) {
+  return (
+    <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <WorkspaceFileListSidebar
+        title="Team files"
+        files={teamFiles}
+        selectedFileName={fileName}
+        onSelectFile={onLoadTeamFile}
+        showOptionalFiles={showOptionalFiles}
+        setShowOptionalFiles={setShowOptionalFiles}
+      />
+
+      <div className="ck-glass-strong p-4 lg:col-span-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Edit: {fileName}</div>
+          <button
+            disabled={saving}
+            onClick={onSaveTeamFile}
+            className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save file"}
+          </button>
+        </div>
+        <textarea
+          value={fileContent}
+          onChange={(e) => setFileContent(e.target.value)}
+          className="mt-3 h-[55vh] w-full resize-none rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-3 font-mono text-xs text-[color:var(--ck-text-primary)]"
+          spellCheck={false}
+        />
+      </div>
+    </div>
+  );
+}
+
+function renderTeamTabPanel(
+  activeTab: TeamTabId,
+  state: {
+    toId: string;
+    setToId: (v: string) => void;
+    toName: string;
+    setToName: (v: string) => void;
+    canEditTargetId: boolean;
+    fromId: string;
+    setFromId: (v: string) => void;
+    teamRecipes: RecipeListItem[];
+    lockedFromId: string | null;
+    lockedFromName: string | null;
+    provenanceMissing: boolean;
+    content: string;
+    setContent: (v: string) => void;
+    loadingSource: boolean;
+    targetIdValid: boolean;
+    targetIsBuiltin: boolean;
+    teamIdValid: boolean;
+    saving: boolean;
+    onLoadTeamRecipeMarkdown: () => void;
+    onSaveCustom: (overwrite: boolean) => void;
+    setCloneNonce: (fn: (n: number) => number) => void;
+    setCloneOpen: (v: boolean) => void;
+    setDeleteOpen: (v: boolean) => void;
+    newRole: string;
+    setNewRole: (v: string) => void;
+    newRoleName: string;
+    setNewRoleName: (v: string) => void;
+    teamAgents: Pick<AgentListItem, "id" | "identityName">[];
+    ensureCustomRecipeExists: (args: { overwrite: boolean }) => Promise<unknown>;
+    flashMessage: (msg: string, kind?: FlashKind) => void;
+    setSaving: (v: boolean) => void;
+    skillsList: string[];
+    cronJobs: unknown[];
+    teamFiles: FileListEntry[];
+    fileName: string;
+    fileContent: string;
+    setFileContent: (v: string) => void;
+    showOptionalFiles: boolean;
+    setShowOptionalFiles: (v: boolean) => void;
+    onLoadTeamFile: (name: string) => void;
+    onSaveTeamFile: () => void;
+  }
+) {
+  switch (activeTab) {
+    case "recipe":
+      return (
+        <RecipeTabContent
+          toId={state.toId}
+          setToId={state.setToId}
+          toName={state.toName}
+          setToName={state.setToName}
+          canEditTargetId={state.canEditTargetId}
+          fromId={state.fromId}
+          setFromId={state.setFromId}
+          teamRecipes={state.teamRecipes}
+          lockedFromId={state.lockedFromId}
+          lockedFromName={state.lockedFromName}
+          provenanceMissing={state.provenanceMissing}
+          content={state.content}
+          setContent={state.setContent}
+          loadingSource={state.loadingSource}
+          targetIdValid={state.targetIdValid}
+          targetIsBuiltin={state.targetIsBuiltin}
+          teamIdValid={state.teamIdValid}
+          saving={state.saving}
+          onLoadTeamRecipeMarkdown={state.onLoadTeamRecipeMarkdown}
+          onSaveCustom={state.onSaveCustom}
+          setCloneNonce={state.setCloneNonce}
+          setCloneOpen={state.setCloneOpen}
+          setDeleteOpen={state.setDeleteOpen}
+        />
+      );
+    case "agents":
+      return (
+        <AgentsTabContent
+          toId={state.toId}
+          newRole={state.newRole}
+          setNewRole={state.setNewRole}
+          newRoleName={state.newRoleName}
+          setNewRoleName={state.setNewRoleName}
+          teamAgents={state.teamAgents}
+          saving={state.saving}
+          ensureCustomRecipeExists={state.ensureCustomRecipeExists}
+          content={state.content}
+          setContent={state.setContent}
+          flashMessage={state.flashMessage}
+          setSaving={state.setSaving}
+        />
+      );
+    case "skills":
+      return <SkillsTabContent skillsList={state.skillsList} />;
+    case "cron":
+      return (
+        <CronTabContent
+          cronJobs={state.cronJobs}
+          saving={state.saving}
+          setSaving={state.setSaving}
+          flashMessage={state.flashMessage}
+        />
+      );
+    case "files":
+      return (
+        <FilesTabContent
+          teamFiles={state.teamFiles}
+          fileName={state.fileName}
+          fileContent={state.fileContent}
+          setFileContent={state.setFileContent}
+          showOptionalFiles={state.showOptionalFiles}
+          setShowOptionalFiles={state.setShowOptionalFiles}
+          saving={state.saving}
+          onLoadTeamFile={state.onLoadTeamFile}
+          onSaveTeamFile={state.onSaveTeamFile}
+        />
+      );
+    default:
+      return null;
+  }
+}
+
 function CronJobListItem({
   job,
   saving,
@@ -142,7 +659,7 @@ function CronJobListItem({
   job: unknown;
   saving: boolean;
   setSaving: (v: boolean) => void;
-  flashMessage: (msg: string, kind?: "success" | "error" | "info") => void;
+  flashMessage: (msg: string, kind?: FlashKind) => void;
 }) {
   const j = job as CronJobShape;
   const id = cronJobId(j);
@@ -199,7 +716,6 @@ function CronJobListItem({
   );
 }
 
-/* eslint-disable sonarjs/cognitive-complexity -- component orchestrates many tabs/features; logic extracted to helpers */
 export default function TeamEditor({ teamId }: { teamId: string }) {
   const router = useRouter();
   const [recipes, setRecipes] = useState<RecipeListItem[]>([]);
@@ -220,11 +736,14 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [cloneNonce, setCloneNonce] = useState(0);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  function flashMessage(next: string, kind: "success" | "error" | "info" = "info") {
-    const msg = String(next ?? "").trim();
-    if (!msg) return;
-    toast.push({ kind, message: msg });
-  }
+  const flashMessage = useCallback(
+    (next: string, kind: FlashKind = "info") => {
+      const msg = String(next ?? "").trim();
+      if (!msg) return;
+      toast.push({ kind, message: msg });
+    },
+    [toast]
+  );
 
   const [teamFiles, setTeamFiles] = useState<FileListEntry[]>([]);
   const [showOptionalFiles, setShowOptionalFiles] = useState(false);
@@ -258,7 +777,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
     setToName(teamId);
   }, [teamId]);
 
-  async function loadTeamData() {
+  const loadTeamData = useCallback(async () => {
     setLoading(true);
     try {
       const [recipesRes, metaRes] = await Promise.all([
@@ -279,12 +798,11 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [teamId, flashMessage]);
 
   useEffect(() => {
     void loadTeamData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamId]);
+  }, [loadTeamData]);
 
   async function onLoadTeamRecipeMarkdown() {
     const id = toId.trim();
@@ -429,285 +947,49 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         ))}
       </div>
 
-      {activeTab === "recipe" ? (
-        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="ck-glass-strong p-4">
-            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Custom recipe target</div>
-            <label className="mt-3 block text-xs font-medium text-[color:var(--ck-text-secondary)]">Team id</label>
-            <input
-              value={toId}
-              onChange={(e) => setToId(e.target.value)}
-              disabled={!canEditTargetId}
-              className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)] disabled:opacity-70"
-            />
-            <div className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">
-              This is the <b>custom recipe id</b> that will be created/overwritten when you save.
-            </div>
-
-            <label className="mt-3 block text-xs font-medium text-[color:var(--ck-text-secondary)]">Team name</label>
-            <input
-              value={toName}
-              onChange={(e) => setToName(e.target.value)}
-              className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-            />
-
-            <div className="mt-4 grid grid-cols-1 gap-2">
-              <button
-                type="button"
-                disabled={loadingSource || !targetIdValid || targetIsBuiltin}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  void onLoadTeamRecipeMarkdown();
-                }}
-                className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-white/10 active:bg-white/15 disabled:opacity-60"
-              >
-                {loadingSource ? "Loading…" : "Load team markdown"}
-              </button>
-
-              <button
-                disabled={saving || !teamIdValid || !targetIdValid || targetIsBuiltin}
-                onClick={() => onSaveCustom(true)}
-                className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] transition-colors hover:bg-[var(--ck-accent-red-hover)] active:bg-[var(--ck-accent-red-active)] disabled:opacity-50"
-              >
-                {saving ? "Saving…" : "Save"}
-              </button>
-
-              <button
-                disabled={saving || !teamIdValid || targetIsBuiltin}
-                onClick={() => {
-                  setCloneNonce((n) => n + 1);
-                  setCloneOpen(true);
-                }}
-                className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-white/10 active:bg-white/15 disabled:opacity-50"
-              >
-                Clone Team
-              </button>
-
-              <button
-                disabled={saving}
-                onClick={() => setDeleteOpen(true)}
-                className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-white/10 active:bg-white/15 disabled:opacity-50"
-              >
-                Delete Team
-              </button>
-            </div>
-          </div>
-
-          <div className="ck-glass-strong p-4">
-            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Notes</div>
-
-            <div className="mt-3 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3">
-              <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Parent recipe (locked)</div>
-              <select
-                disabled
-                className="mt-2 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)] disabled:opacity-70"
-                value={fromId}
-                onChange={(e) => setFromId(e.target.value)}
-              >
-                {teamRecipes.map((r) => (
-                  <option key={`${r.source}:${r.id}`} value={r.id}>
-                    {r.id} ({r.source})
-                  </option>
-                ))}
-              </select>
-              {lockedFromId && (
-                <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
-                  <code>{lockedFromId}</code>
-                  {lockedFromName ? ` (${lockedFromName})` : ""}
-                </div>
-              )}
-              {!lockedFromId && provenanceMissing && (
-                <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
-                  Provenance not found for this team. The parent recipe above is a best-guess.
-                </div>
-              )}
-
-
-            </div>
-
-            <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-[color:var(--ck-text-secondary)]">
-              <li>
-                <strong>Save</strong> writes/overwrites the custom recipe file identified by “Team id”.
-              </li>
-              <li>
-                <strong>Clone Team</strong> creates a new custom recipe copy (fails if it already exists).
-              </li>
-              <li>
-                <strong>Delete Team</strong> runs the safe uninstall command (<code>openclaw recipes remove-team</code>).
-              </li>
-            </ul>
-          </div>
-        </div>
-      ) : null}
-
-      {activeTab === "agents" ? (
-        <div className="mt-6 ck-glass-strong p-4">
-          <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Agents in this team</div>
-          <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
-            Thin slice: manage agents by editing the <code>agents:</code> list in your custom team recipe (<code>{toId}</code>).
-          </p>
-
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div>
-              <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Role</label>
-              <input
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value)}
-                placeholder="lead"
-                className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Name (optional)</label>
-              <input
-                value={newRoleName}
-                onChange={(e) => setNewRoleName(e.target.value)}
-                placeholder="Dev Team Lead"
-                className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-              />
-            </div>
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              disabled={saving}
-              onClick={() =>
-                updateTeamAgents(
-                  { recipeId: toId.trim(), op: "add", role: newRole, name: newRoleName },
-                  `Updated agents list in ${toId}`,
-                  () => ensureCustomRecipeExists({ overwrite: false }),
-                  content,
-                  setContent,
-                  flashMessage,
-                  setSaving
-                )
-              }
-              className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
-            >
-              Add / Update role
-            </button>
-            <button
-              disabled={saving}
-              onClick={() =>
-                updateTeamAgents(
-                  { recipeId: toId.trim(), op: "remove", role: newRole },
-                  `Removed role ${newRole} from ${toId}`,
-                  () => ensureCustomRecipeExists({ overwrite: false }),
-                  content,
-                  setContent,
-                  flashMessage,
-                  setSaving
-                )
-              }
-              className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-white/10 disabled:opacity-50"
-            >
-              Remove role
-            </button>
-          </div>
-
-          <div className="mt-6">
-            <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Detected installed team agents (read-only)</div>
-            <ul className="mt-2 space-y-2">
-              {teamAgents.length ? (
-                teamAgents.map((a) => (
-                  <li key={a.id} className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-[color:var(--ck-text-primary)]">
-                        {a.identityName || a.id}
-                      </div>
-                      <div className="text-xs text-[color:var(--ck-text-secondary)]">{a.id}</div>
-                    </div>
-                    <a
-                      className="text-sm font-medium text-[color:var(--ck-accent-red)] hover:text-[color:var(--ck-accent-red-hover)]"
-                      href={`/agents/${encodeURIComponent(a.id)}`}
-                    >
-                      Edit
-                    </a>
-                  </li>
-                ))
-              ) : (
-                <li className="text-sm text-[color:var(--ck-text-secondary)]">No team agents detected.</li>
-              )}
-            </ul>
-          </div>
-        </div>
-      ) : null}
-
-      {activeTab === "skills" ? (
-        <div className="mt-6 ck-glass-strong p-4">
-          <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Installed skills (team workspace)</div>
-          <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-[color:var(--ck-text-secondary)]">
-            {skillsList.length ? skillsList.map((s) => <li key={s}>{s}</li>) : <li>No skills installed.</li>}
-          </ul>
-        </div>
-      ) : null}
-
-      {activeTab === "cron" ? (
-        <div className="mt-6 ck-glass-strong p-4">
-          <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Cron jobs (filtered by team name)</div>
-          <ul className="mt-3 space-y-3">
-            {cronJobs.length ? (
-              cronJobs.map((j) => (
-                <CronJobListItem
-                  key={cronJobId(j) || cronJobLabel(j) || "job"}
-                  job={j}
-                  saving={saving}
-                  setSaving={setSaving}
-                  flashMessage={flashMessage}
-                />
-              ))
-            ) : (
-              <li className="text-sm text-[color:var(--ck-text-secondary)]">No cron jobs detected for this team.</li>
-            )}
-          </ul>
-        </div>
-      ) : null}
-
-      {activeTab === "files" ? (
-        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <WorkspaceFileListSidebar
-            title="Team files"
-            files={teamFiles}
-            selectedFileName={fileName}
-            onSelectFile={onLoadTeamFile}
-            showOptionalFiles={showOptionalFiles}
-            setShowOptionalFiles={setShowOptionalFiles}
-          />
-
-          <div className="ck-glass-strong p-4 lg:col-span-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Edit: {fileName}</div>
-              <button
-                disabled={saving}
-                onClick={onSaveTeamFile}
-                className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
-              >
-                {saving ? "Saving…" : "Save file"}
-              </button>
-            </div>
-            <textarea
-              value={fileContent}
-              onChange={(e) => setFileContent(e.target.value)}
-              className="mt-3 h-[55vh] w-full resize-none rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-3 font-mono text-xs text-[color:var(--ck-text-primary)]"
-              spellCheck={false}
-            />
-          </div>
-        </div>
-      ) : null}
-
-      {/* markdown editor lives below for convenience */}
-      {activeTab === "recipe" ? (
-        <div className="mt-6 ck-glass-strong p-4">
-          <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Recipe markdown</div>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="mt-2 h-[55vh] w-full resize-none rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-3 font-mono text-xs text-[color:var(--ck-text-primary)]"
-            spellCheck={false}
-          />
-        </div>
-      ) : null}
+      {renderTeamTabPanel(activeTab, {
+        toId,
+        setToId,
+        toName,
+        setToName,
+        canEditTargetId,
+        fromId,
+        setFromId,
+        teamRecipes,
+        lockedFromId,
+        lockedFromName,
+        provenanceMissing,
+        content,
+        setContent,
+        loadingSource,
+        targetIdValid,
+        targetIsBuiltin,
+        teamIdValid,
+        saving,
+        onLoadTeamRecipeMarkdown,
+        onSaveCustom,
+        setCloneNonce,
+        setCloneOpen,
+        setDeleteOpen,
+        newRole,
+        setNewRole,
+        newRoleName,
+        setNewRoleName,
+        teamAgents,
+        ensureCustomRecipeExists,
+        flashMessage,
+        setSaving,
+        skillsList,
+        cronJobs,
+        teamFiles,
+        fileName,
+        fileContent,
+        setFileContent,
+        showOptionalFiles,
+        setShowOptionalFiles,
+        onLoadTeamFile,
+        onSaveTeamFile,
+      })}
 
       <CloneTeamModal
         key={cloneNonce}
@@ -750,7 +1032,6 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         }}
       />
 
-      {/* duplicate markdown editor removed */}
     </div>
   );
 }

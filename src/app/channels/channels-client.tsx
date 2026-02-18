@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import { isRecord } from "@/lib/type-guards";
 
@@ -53,7 +53,7 @@ export default function ChannelsClient() {
     return { ok: true, channels: ch };
   }
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -72,7 +72,7 @@ export default function ChannelsClient() {
       setChannels({});
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,8 +83,7 @@ export default function ChannelsClient() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refresh]);
 
   const providers = useMemo(() => {
     const keys = Object.keys(channels);

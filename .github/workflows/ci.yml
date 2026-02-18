@@ -23,7 +23,6 @@ jobs:
 
       - name: Check for code duplication (jscpd)
         run: npm run dup:check
-        continue-on-error: true
 
       - name: Upload jscpd report
         uses: actions/upload-artifact@v4
