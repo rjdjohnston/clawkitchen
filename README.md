@@ -12,9 +12,11 @@ Local-first UI companion for **ClawRecipes** (OpenClaw Recipes plugin).
 
 ClawKitchen can be loaded as an OpenClaw plugin so it runs locally on the orchestrator.
 
-### 1) Load the plugin from a local path (pre-release testing)
+### 1) Install / load the plugin
 
-Before publishing to npm, you can load it directly from the repo by adding the repo path to `plugins.load.paths`.
+**Recommended (end users):** install the published plugin package (ships with a prebuilt `.next/` so you don’t run any npm commands).
+
+**Developer/testing:** you can also load it directly from a local repo path via `plugins.load.paths`.
 
 Edit your OpenClaw config (`~/.openclaw/openclaw.json`) and add:
 

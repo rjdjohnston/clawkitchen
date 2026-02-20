@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   },
   // Also helps Next resolve dependencies correctly in nested repos.
   outputFileTracingRoot: __dirname,
+
+  // Required so we can ship a prebuilt server bundle (no npm commands for end users).
+  output: "standalone",
 };
 
 export default nextConfig;

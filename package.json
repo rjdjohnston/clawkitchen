@@ -10,8 +10,19 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "smoke:goals": "node scripts/goals-smoke.mjs"
+    "smoke:goals": "node scripts/goals-smoke.mjs",
+    "prepack": "npm run build"
   },
+  "files": [
+    "openclaw/",
+    "openclaw.plugin.json",
+    "README.md",
+    "next.config.ts",
+    "public/",
+    "src/",
+    ".next/standalone/",
+    ".next/static/"
+  ],
   "dependencies": {
     "next": "16.1.6",
     "react": "19.2.3",
