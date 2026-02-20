@@ -40,6 +40,61 @@ function forceFrontmatterId(md: string, id: string) {
   return `---\n${nextLines.join("\n")}\n---\n${body}`;
 }
 
+function forceFrontmatterTeamTeamId(md: string, teamId: string) {
+  // Best-effort YAML frontmatter patch without reparsing the whole recipe.
+  // Goal: ensure `team: { teamId: <id> }` matches the custom recipe id after Save.
+  if (!md.startsWith("---\n")) return md;
+  const end = md.indexOf("\n---\n", 4);
+  if (end === -1) return md;
+
+  const fm = md.slice(4, end);
+  const body = md.slice(end + 5);
+  const lines = fm.split("\n");
+
+  const next: string[] = [];
+  let inTeam = false;
+  let sawTeamBlock = false;
+  let patched = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^team\s*:\s*$/i.test(line)) {
+      inTeam = true;
+      sawTeamBlock = true;
+      next.push(line);
+      continue;
+    }
+
+    // Leave team block when indentation returns to column 0.
+    if (inTeam && /^\S/.test(line)) {
+      inTeam = false;
+    }
+
+    if (inTeam && /^\s+teamId\s*:/i.test(line)) {
+      next.push(`  teamId: ${teamId}`);
+      patched = true;
+      continue;
+    }
+
+    next.push(line);
+  }
+
+  // If there was a team block but no teamId, insert it right after `team:`.
+  if (sawTeamBlock && !patched) {
+    const out: string[] = [];
+    for (let i = 0; i < next.length; i++) {
+      out.push(next[i]);
+      if (/^team\s*:\s*$/i.test(next[i])) {
+        out.push(`  teamId: ${teamId}`);
+        patched = true;
+      }
+    }
+    return `---\n${out.join("\n")}\n---\n${body}`;
+  }
+
+  return `---\n${next.join("\n")}\n---\n${body}`;
+}
+
 export default function TeamEditor({ teamId }: { teamId: string }) {
   const router = useRouter();
   const [recipes, setRecipes] = useState<RecipeListItem[]>([]);
@@ -354,7 +409,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
       const hasEdits = Boolean(content.trim()) && content.trim() !== json.content.trim();
 
       if (hasEdits) {
-        const nextContent = forceFrontmatterId(content, toId.trim());
+        const nextContent = forceFrontmatterTeamTeamId(forceFrontmatterId(content, toId.trim()), toId.trim());
         const res = await fetch(`/api/recipes/${encodeURIComponent(toId.trim())}`, {
           method: "PUT",
           headers: { "content-type": "application/json" },
