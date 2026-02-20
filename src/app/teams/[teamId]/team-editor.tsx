@@ -87,6 +87,13 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [customRole, setCustomRole] = useState<string>("");
   const [newRoleName, setNewRoleName] = useState<string>("");
 
+  const derivedRole = useMemo(() => {
+    const v = (newRole === "__custom__" ? customRole : newRole).trim();
+    if (!v) return "";
+    if (v.startsWith(`${teamId}-`)) return v.slice(teamId.length + 1);
+    return v;
+  }, [newRole, customRole, teamId]);
+
   const [skillsList, setSkillsList] = useState<string[]>([]);
   const [availableSkills, setAvailableSkills] = useState<string[]>([]);
   const [skillsLoading, setSkillsLoading] = useState(false);
@@ -568,82 +575,37 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
-              <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Agent name</label>
-              <select
-                value={newRole}
+              <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Role</label>
+              <input
+                value={customRole}
                 onChange={(e) => {
-                  const v = e.target.value;
-                  setNewRole(v);
-                  if (v === "__custom__") {
-                    setCustomRole("");
-                    setNewRoleName("");
-                    return;
-                  }
-                  setCustomRole("");
-                  if (v) {
-                    const match = teamAgents.find((a) => a.id === v);
-                    setNewRoleName(match?.identityName || "");
-                  } else {
-                    setNewRoleName("");
-                  }
+                  setNewRole("__custom__");
+                  setCustomRole(e.target.value);
                 }}
+                placeholder="e.g. researcher"
                 className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-              >
-                <option value="">Select…</option>
-                {teamAgents.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.identityName || a.id}
-                  </option>
-                ))}
-                <option value="__custom__">Custom role…</option>
-              </select>
+              />
               <div className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">
-                For now this list is based on detected installed team agents. Choose “Custom role…” to type a new role.
+                This writes to the recipe’s <code>agents:</code> list. Agent id will be <code>{teamId}-&lt;role&gt;</code> (ex: <code>{teamId}-researcher</code>).
               </div>
             </div>
 
             <div className="sm:col-span-2">
-              {newRole === "__custom__" ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div>
-                    <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Role</label>
-                    <input
-                      value={customRole}
-                      onChange={(e) => setCustomRole(e.target.value)}
-                      placeholder="lead"
-                      className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Name (optional)</label>
-                    <input
-                      value={newRoleName}
-                      onChange={(e) => setNewRoleName(e.target.value)}
-                      placeholder="Dev Team Lead"
-                      className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-                    />
-                  </div>
-                  <div className="sm:col-span-3 mt-1 text-xs text-[color:var(--ck-text-tertiary)]">
-                    This will be saved as the agent <code>role</code> in the team recipe frontmatter.
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Display name (optional)</label>
-                  <input
-                    value={newRoleName}
-                    onChange={(e) => setNewRoleName(e.target.value)}
-                    placeholder="Dev Team Lead"
-                    className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-                  />
-                </div>
-              )}
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Name (optional)</label>
+                <input
+                  value={newRoleName}
+                  onChange={(e) => setNewRoleName(e.target.value)}
+                  placeholder="Onchain Researcher"
+                  className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
+                />
+              </div>
             </div>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
             <button
-              disabled={saving || !newRole || (newRole === "__custom__" && !customRole.trim())}
+              disabled={saving || !derivedRole}
               onClick={async () => {
                 setSaving(true);
                 try {
@@ -661,12 +623,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                     body: JSON.stringify({
                       recipeId: toId.trim(),
                       op: "add",
-                      role:
-                        newRole === "__custom__"
-                          ? customRole
-                          : newRole.startsWith(`${teamId}-`)
-                            ? newRole.slice(teamId.length + 1)
-                            : newRole,
+                      role: derivedRole,
                       name: newRoleName,
                     }),
                   });
@@ -684,40 +641,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
             >
               Add agent
             </button>
-            <button
-              disabled={saving || !newRole || (newRole === "__custom__" && !customRole.trim())}
-              onClick={async () => {
-                setSaving(true);
-                try {
-                  await ensureCustomRecipeExists({ overwrite: false });
-                  const res = await fetch("/api/recipes/team-agents", {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({
-                      recipeId: toId.trim(),
-                      op: "remove",
-                      role:
-                        newRole === "__custom__"
-                          ? customRole
-                          : newRole.startsWith(`${teamId}-`)
-                            ? newRole.slice(teamId.length + 1)
-                            : newRole,
-                    }),
-                  });
-                  const json = await res.json();
-                  if (!res.ok || !json.ok) throw new Error(json.error || "Failed updating agents list");
-                  setContent(String(json.content ?? content));
-                  flashMessage(`Removed role ${newRole} from ${toId}`, "success");
-                } catch (e: unknown) {
-                  flashMessage(e instanceof Error ? e.message : String(e), "error");
-                } finally {
-                  setSaving(false);
-                }
-              }}
-              className="hidden"
-            >
-Remove agent
-            </button>
+            {/* remove-agent UI intentionally omitted */}
           </div>
 
           <div className="mt-6">
