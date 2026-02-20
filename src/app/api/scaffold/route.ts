@@ -2,8 +2,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
+import YAML from "yaml";
 import { runOpenClaw } from "@/lib/openclaw";
-import { readOpenClawConfig } from "@/lib/paths";
+import { readOpenClawConfig, getWorkspaceRecipesDir } from "@/lib/paths";
 
 type ReqBody =
   | {
@@ -41,7 +42,7 @@ const TEAM_META_FILE = "team.json";
 const AGENT_META_FILE = "agent.json";
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as ReqBody & { cronInstallChoice?: "yes" | "no" };
+  const body = (await req.json()) as ReqBody & { cronInstallChoice?: "yes" | "no"; allowExisting?: boolean };
 
   const args: string[] = ["recipes", body.kind === "team" ? "scaffold-team" : "scaffold", body.recipeId];
 
@@ -57,6 +58,9 @@ export async function POST(req: Request) {
 
   if (body.overwrite) args.push("--overwrite");
   if (body.applyConfig) args.push("--apply-config");
+
+  // scaffold/scaffold-team also writes a workspace recipe file; allow re-runs against existing teams.
+  if (body.allowExisting || body.overwrite) args.push("--overwrite-recipe");
 
   if (body.kind === "agent") {
     if (body.agentId) args.push("--agent-id", body.agentId);
@@ -75,7 +79,7 @@ export async function POST(req: Request) {
     // 1) Do not allow creating a team/agent with an id that collides with ANY recipe id.
     //    (BUT allow when overwrite=true, which is used for re-scaffolding/publish flows.)
     // 2) Do not allow creating a team/agent that already exists unless overwrite was explicitly set.
-    if (!body.overwrite) {
+    if (!body.overwrite && !body.allowExisting) {
       const recipesRes = await runOpenClaw(["recipes", "list"]);
       if (recipesRes.ok) {
         try {
@@ -107,7 +111,7 @@ export async function POST(req: Request) {
       }
     }
 
-    if (!body.overwrite) {
+    if (!body.overwrite && !body.allowExisting) {
       if (body.kind === "agent") {
         const agentId = String(body.agentId ?? "").trim();
         if (agentId) {
@@ -219,6 +223,34 @@ export async function POST(req: Request) {
             await fs.mkdir(teamDir, { recursive: true });
             await fs.writeFile(path.join(teamDir, TEAM_META_FILE), JSON.stringify(meta, null, 2) + "\n", "utf8");
           }
+
+          // Best-effort: ensure the generated workspace recipe's `team.teamId` matches the new team id.
+          // Some template recipes carry a `team.teamId` that should not leak into cloned/scaffolded copies.
+          try {
+            const recipesDir = await getWorkspaceRecipesDir();
+            const recipePath = path.join(recipesDir, `${teamId}.md`);
+            const md = await fs.readFile(recipePath, "utf8");
+            if (md.startsWith("---\n")) {
+              const end = md.indexOf("\n---\n", 4);
+              if (end !== -1) {
+                const yamlText = md.slice(4, end + 1);
+                const rest = md.slice(end + 5);
+                const fm = (YAML.parse(yamlText) ?? {}) as Record<string, unknown>;
+                const nextFm: Record<string, unknown> = {
+                  ...fm,
+                  team: {
+                    ...(typeof fm.team === "object" && fm.team ? (fm.team as Record<string, unknown>) : {}),
+                    teamId,
+                  },
+                };
+                const nextYaml = YAML.stringify(nextFm).trimEnd();
+                const nextMd = `---\n${nextYaml}\n---\n${rest}`;
+                if (nextMd !== md) await fs.writeFile(recipePath, nextMd, "utf8");
+              }
+            }
+          } catch {
+            // ignore
+          }
         } catch {
           // best-effort only; scaffold should still succeed
         }
@@ -268,14 +300,8 @@ export async function POST(req: Request) {
       }
     }
 
-    // If scaffold wrote to config, restart gateway so subsequent `openclaw agents list` reflects the new agent/team.
-    if (body.applyConfig) {
-      try {
-        await runOpenClaw(["gateway", "restart"]);
-      } catch {
-        // best-effort: recipe scaffolding succeeded even if restart fails
-      }
-    }
+    // Note: do NOT restart the gateway here. Some flows (like Add agent) will
+    // poll for updated state and only restart if necessary to avoid global slowness.
 
     return NextResponse.json({ ok: true, args, stdout, stderr });
   } catch (e: unknown) {

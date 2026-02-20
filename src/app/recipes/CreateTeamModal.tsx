@@ -155,21 +155,10 @@ export function CreateTeamModal({
                   setTeamId(e.target.value);
                 }}
                 placeholder="e.g. my-team"
-                className={
-                  "mt-2 w-full rounded-[var(--ck-radius-sm)] border bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)] " +
-                  (availability.state === "available"
-                    ? "border-emerald-400/50"
-                    : availability.state === "taken"
-                      ? "border-red-400/60"
-                      : "border-white/10")
-                }
+                className="mt-2 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)]"
               />
               <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
-                {availability.state === "taken"
-                  ? "That id is already taken."
-                  : availability.state === "available"
-                    ? "Id is available."
-                    : "This will scaffold ~/.openclaw/workspace-<teamId> and add the team to config."}
+                This will scaffold ~/.openclaw/workspace-&lt;teamId&gt; and add the team to config.
               </div>
             </div>
 
@@ -198,7 +187,7 @@ export function CreateTeamModal({
               </button>
               <button
                 type="button"
-                disabled={busy || !effectiveId.trim() || availability.state === "taken" || availability.state === "checking"}
+                disabled={busy || !effectiveId.trim()}
                 onClick={onConfirm}
                 className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] hover:bg-[var(--ck-accent-red-hover)] disabled:opacity-50"
               >

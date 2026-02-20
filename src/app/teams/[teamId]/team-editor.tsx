@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { parse as parseYaml } from "yaml";
 import { useRouter } from "next/navigation";
 import { DeleteTeamModal } from "./DeleteTeamModal";
 import { PublishChangesModal } from "./PublishChangesModal";
@@ -38,6 +39,61 @@ function forceFrontmatterId(md: string, id: string) {
   if (!found) nextLines.unshift(`id: ${id}`);
 
   return `---\n${nextLines.join("\n")}\n---\n${body}`;
+}
+
+function forceFrontmatterTeamTeamId(md: string, teamId: string) {
+  // Best-effort YAML frontmatter patch without reparsing the whole recipe.
+  // Goal: ensure `team: { teamId: <id> }` matches the custom recipe id after Save.
+  if (!md.startsWith("---\n")) return md;
+  const end = md.indexOf("\n---\n", 4);
+  if (end === -1) return md;
+
+  const fm = md.slice(4, end);
+  const body = md.slice(end + 5);
+  const lines = fm.split("\n");
+
+  const next: string[] = [];
+  let inTeam = false;
+  let sawTeamBlock = false;
+  let patched = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^team\s*:\s*$/i.test(line)) {
+      inTeam = true;
+      sawTeamBlock = true;
+      next.push(line);
+      continue;
+    }
+
+    // Leave team block when indentation returns to column 0.
+    if (inTeam && /^\S/.test(line)) {
+      inTeam = false;
+    }
+
+    if (inTeam && /^\s+teamId\s*:/i.test(line)) {
+      next.push(`  teamId: ${teamId}`);
+      patched = true;
+      continue;
+    }
+
+    next.push(line);
+  }
+
+  // If there was a team block but no teamId, insert it right after `team:`.
+  if (sawTeamBlock && !patched) {
+    const out: string[] = [];
+    for (let i = 0; i < next.length; i++) {
+      out.push(next[i]);
+      if (/^team\s*:\s*$/i.test(next[i])) {
+        out.push(`  teamId: ${teamId}`);
+        patched = true;
+      }
+    }
+    return `---\n${out.join("\n")}\n---\n${body}`;
+  }
+
+  return `---\n${next.join("\n")}\n---\n${body}`;
 }
 
 export default function TeamEditor({ teamId }: { teamId: string }) {
@@ -83,8 +139,33 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [teamAgents, setTeamAgents] = useState<Array<{ id: string; identityName?: string }>>([]);
   const [teamAgentsLoading, setTeamAgentsLoading] = useState(false);
 
+  const recipeAgents = useMemo(() => {
+    const md = String(content ?? "");
+    if (!md.startsWith("---\n")) return [] as Array<{ role: string; name?: string }>;
+    const end = md.indexOf("\n---\n", 4);
+    if (end === -1) return [] as Array<{ role: string; name?: string }>;
+    const fmText = md.slice(4, end + 1);
+    try {
+      const fm = (parseYaml(fmText) ?? {}) as { agents?: unknown };
+      const agents = Array.isArray(fm.agents) ? fm.agents : [];
+      return agents
+        .map((a) => a as { role?: unknown; name?: unknown })
+        .map((a) => ({ role: String(a.role ?? "").trim(), name: typeof a.name === "string" ? a.name : undefined }))
+        .filter((a) => Boolean(a.role));
+    } catch {
+      return [] as Array<{ role: string; name?: string }>;
+    }
+  }, [content]);
+
   const [newRole, setNewRole] = useState<string>("");
+  const [customRole, setCustomRole] = useState<string>("");
   const [newRoleName, setNewRoleName] = useState<string>("");
+
+  const derivedRole = useMemo(() => {
+    const v = (newRole === "__custom__" ? customRole : newRole).trim();
+    if (!v) return "";
+    return v;
+  }, [newRole, customRole]);
 
   const [skillsList, setSkillsList] = useState<string[]>([]);
   const [availableSkills, setAvailableSkills] = useState<string[]>([]);
@@ -346,7 +427,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
       const hasEdits = Boolean(content.trim()) && content.trim() !== json.content.trim();
 
       if (hasEdits) {
-        const nextContent = forceFrontmatterId(content, toId.trim());
+        const nextContent = forceFrontmatterTeamTeamId(forceFrontmatterId(content, toId.trim()), toId.trim());
         const res = await fetch(`/api/recipes/${encodeURIComponent(toId.trim())}`, {
           method: "PUT",
           headers: { "content-type": "application/json" },
@@ -562,45 +643,173 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         <div className="mt-6 ck-glass-strong p-4">
           <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Agents in this team</div>
           <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
-            Thin slice: manage agents by editing the <code>agents:</code> list in your custom team recipe (<code>{toId}</code>).
+            Add/remove agents by updating the <code>agents:</code> list in your custom team recipe (<code>{toId}</code>).
           </p>
 
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Role</label>
-              <input
+              <select
                 value={newRole}
-                onChange={(e) => setNewRole(e.target.value)}
-                placeholder="lead"
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setNewRole(v);
+                  if (v === "__custom__") {
+                    setCustomRole("");
+                    setNewRoleName("");
+                    return;
+                  }
+                  setCustomRole("");
+                  const match = recipeAgents.find((a) => a.role === v);
+                  setNewRoleName(match?.name || "");
+                }}
                 className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-              />
+              >
+                <option value="">Select…</option>
+                {recipeAgents.map((a) => (
+                  <option key={a.role} value={a.role}>
+                    {a.name || a.role}
+                  </option>
+                ))}
+                <option value="__custom__">Other…</option>
+              </select>
+
+              {newRole === "__custom__" ? (
+                <input
+                  value={customRole}
+                  onChange={(e) => setCustomRole(e.target.value)}
+                  placeholder="role (e.g. researcher)"
+                  className="mt-2 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
+                />
+              ) : null}
+
+              <div className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">
+                This writes to the recipe’s <code>agents:</code> list.
+              </div>
             </div>
+
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Name (optional)</label>
-              <input
-                value={newRoleName}
-                onChange={(e) => setNewRoleName(e.target.value)}
-                placeholder="Dev Team Lead"
-                className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-              />
+              <div>
+                <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Name (optional)</label>
+                <input
+                  value={newRoleName}
+                  onChange={(e) => setNewRoleName(e.target.value)}
+                  placeholder="Onchain Researcher"
+                  className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
+                />
+              </div>
             </div>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
             <button
-              disabled={saving}
+              disabled={saving || !derivedRole}
               onClick={async () => {
                 setSaving(true);
-                                try {
-                  await ensureCustomRecipeExists({ overwrite: false });
+                try {
+                  try {
+                    await ensureCustomRecipeExists({ overwrite: false });
+                  } catch (e: unknown) {
+                    // If the custom recipe already exists, proceed; we only needed to ensure a workspace file exists.
+                    // Note: /api/recipes/clone returns 409 in this case.
+                    const msg = e instanceof Error ? e.message : String(e);
+                    if (!/Recipe id already exists:/i.test(msg)) throw e;
+                  }
                   const res = await fetch("/api/recipes/team-agents", {
                     method: "POST",
                     headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ recipeId: toId.trim(), op: "add", role: newRole, name: newRoleName }),
+                    body: JSON.stringify(
+                      newRole === "__custom__"
+                        ? {
+                            recipeId: toId.trim(),
+                            op: "add",
+                            role: derivedRole,
+                            name: newRoleName,
+                          }
+                        : {
+                            recipeId: toId.trim(),
+                            op: "addLike",
+                            baseRole: derivedRole,
+                            teamId,
+                            name: newRoleName,
+                          },
+                    ),
                   });
                   const json = await res.json();
                   if (!res.ok || !json.ok) throw new Error(json.error || "Failed updating agents list");
                   setContent(String(json.content ?? content));
+
+                  // Immediately install/create the new agent by applying config and scaffolding missing files.
+                  // Do not overwrite existing recipe-managed files.
+                  try {
+                    const sync = await fetch("/api/scaffold", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({
+                        kind: "team",
+                        recipeId: toId.trim(),
+                        teamId,
+                        applyConfig: true,
+                        overwrite: false,
+                        allowExisting: true,
+                        cronInstallChoice: "no",
+                      }),
+                    });
+                    const syncJson = await sync.json();
+                    if (!sync.ok) throw new Error(syncJson.error || "Failed to apply config / scaffold team");
+                  } catch (e: unknown) {
+                    // Non-fatal: recipe change is still saved.
+                    flashMessage(e instanceof Error ? e.message : String(e), "error");
+                  }
+
+                  // Poll for new agent to appear; only restart gateway if needed.
+                  const expectedAgentId = typeof (json as { addedAgentId?: unknown }).addedAgentId === "string" ? (json as { addedAgentId?: string }).addedAgentId : "";
+
+                  async function refreshAgentsOnce() {
+                    const agentsRes = await fetch("/api/agents", { cache: "no-store" });
+                    const agentsJson = (await agentsRes.json()) as { agents?: unknown[] };
+                    if (!agentsRes.ok) return { ok: false as const, hasExpected: false as const, agents: [] as Array<{ id: string; identityName?: string }> };
+                    const all = Array.isArray(agentsJson.agents) ? agentsJson.agents : [];
+                    const filtered = all.filter((a) => String((a as { id?: unknown }).id ?? "").startsWith(`${teamId}-`));
+                    const mapped = filtered.map((a) => {
+                      const agent = a as { id?: unknown; identityName?: unknown };
+                      return {
+                        id: String(agent.id ?? ""),
+                        identityName: typeof agent.identityName === "string" ? agent.identityName : undefined,
+                      };
+                    });
+                    const hasExpected = expectedAgentId ? mapped.some((a) => a.id === expectedAgentId) : false;
+                    return { ok: true as const, hasExpected, agents: mapped };
+                  }
+
+                  async function pollAgents(maxMs: number) {
+                    const start = Date.now();
+                    while (Date.now() - start < maxMs) {
+                      try {
+                        const r = await refreshAgentsOnce();
+                        if (r.ok) {
+                          setTeamAgents(r.agents);
+                          if (!expectedAgentId || r.hasExpected) return true;
+                        }
+                      } catch {
+                        // ignore
+                      }
+                      await new Promise((res) => setTimeout(res, 500));
+                    }
+                    return false;
+                  }
+
+                  const appeared = await pollAgents(5000);
+                  if (!appeared && expectedAgentId) {
+                    // Background-ish restart: do it only if needed.
+                    try {
+                      void fetch("/api/gateway/restart", { method: "POST" });
+                    } catch {
+                      // ignore
+                    }
+                    await pollAgents(10000);
+                  }
+
                   flashMessage(`Updated agents list in ${toId}`, "success");
                 } catch (e: unknown) {
                   flashMessage(e instanceof Error ? e.message : String(e), "error");
@@ -610,33 +819,9 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
               }}
               className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
             >
-              Add / Update role
+              Add agent
             </button>
-            <button
-              disabled={saving}
-              onClick={async () => {
-                setSaving(true);
-                                try {
-                  await ensureCustomRecipeExists({ overwrite: false });
-                  const res = await fetch("/api/recipes/team-agents", {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ recipeId: toId.trim(), op: "remove", role: newRole }),
-                  });
-                  const json = await res.json();
-                  if (!res.ok || !json.ok) throw new Error(json.error || "Failed updating agents list");
-                  setContent(String(json.content ?? content));
-                  flashMessage(`Removed role ${newRole} from ${toId}`, "success");
-                } catch (e: unknown) {
-                  flashMessage(e instanceof Error ? e.message : String(e), "error");
-                } finally {
-                  setSaving(false);
-                }
-              }}
-              className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-white/10 disabled:opacity-50"
-            >
-              Remove role
-            </button>
+            {/* remove-agent UI intentionally omitted */}
           </div>
 
           <div className="mt-6">
@@ -691,7 +876,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                 value={selectedSkill}
                 onChange={(e) => setSelectedSkill(e.target.value)}
                 className="w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-                disabled={installingSkill || !availableSkills.length}
+                disabled={installingSkill || skillsLoading || !availableSkills.length}
               >
                 {availableSkills.length ? (
                   availableSkills.map((s) => (
@@ -705,7 +890,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
               </select>
               <button
                 type="button"
-                disabled={installingSkill || !selectedSkill}
+                disabled={installingSkill || skillsLoading || !selectedSkill}
                 onClick={async () => {
                   setInstallingSkill(true);
                   setTeamSkillMsg("");

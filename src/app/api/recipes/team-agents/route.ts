@@ -3,6 +3,7 @@ import path from "node:path";
 import YAML from "yaml";
 import { NextResponse } from "next/server";
 import { getWorkspaceRecipesDir } from "@/lib/paths";
+import { runOpenClaw } from "@/lib/openclaw";
 
 function splitFrontmatter(md: string) {
   if (!md.startsWith("---\n")) throw new Error("Recipe markdown must start with YAML frontmatter (---)");
@@ -23,19 +24,20 @@ function normalizeRole(role: string) {
 export async function POST(req: Request) {
   const body = (await req.json()) as {
     recipeId?: string;
-    op?: "add" | "remove";
+    op?: "add" | "remove" | "addLike";
     role?: string;
+    baseRole?: string;
+    teamId?: string;
     name?: string;
   };
 
   const recipeId = String(body.recipeId ?? "").trim();
   const op = body.op;
   if (!recipeId) return NextResponse.json({ ok: false, error: "recipeId is required" }, { status: 400 });
-  if (op !== "add" && op !== "remove") {
-    return NextResponse.json({ ok: false, error: "op must be add|remove" }, { status: 400 });
+  if (op !== "add" && op !== "remove" && op !== "addLike") {
+    return NextResponse.json({ ok: false, error: "op must be add|remove|addLike" }, { status: 400 });
   }
 
-  const role = normalizeRole(String(body.role ?? ""));
   const name = typeof body.name === "string" ? body.name.trim() : "";
 
   const dir = await getWorkspaceRecipesDir();
@@ -58,8 +60,10 @@ export async function POST(req: Request) {
   let nextAgents = agents.slice();
 
   if (op === "remove") {
+    const role = normalizeRole(String(body.role ?? ""));
     nextAgents = nextAgents.filter((a) => String(a.role ?? "") !== role);
-  } else {
+  } else if (op === "add") {
+    const role = normalizeRole(String(body.role ?? ""));
     // add or update by role
     const next = {
       ...agents.find((a) => String(a.role ?? "") === role),
@@ -69,6 +73,63 @@ export async function POST(req: Request) {
     const idx = nextAgents.findIndex((a) => String(a.role ?? "") === role);
     if (idx === -1) nextAgents.push(next);
     else nextAgents[idx] = next;
+  } else {
+    // addLike: create a *new* role entry based on an existing role's capabilities.
+    const baseRole = normalizeRole(String(body.baseRole ?? ""));
+    const base = agents.find((a) => String(a.role ?? "") === baseRole);
+    if (!base) {
+      return NextResponse.json({ ok: false, error: `baseRole not found in recipe: ${baseRole}` }, { status: 400 });
+    }
+
+    const usedRoles = new Set(nextAgents.map((a) => String(a.role ?? "").trim()).filter(Boolean));
+
+    // Find next suffix: baseRole, baseRole-2, baseRole-3, ...
+    let n = 1;
+    for (const r of usedRoles) {
+      if (r === baseRole) n = Math.max(n, 1);
+      const m = r.match(new RegExp(`^${baseRole.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}-([0-9]+)$`));
+      if (m) {
+        const k = Number(m[1]);
+        if (Number.isFinite(k)) n = Math.max(n, k);
+      }
+    }
+
+    const teamId = String(body.teamId ?? "").trim();
+    let existingAgentIds = new Set<string>();
+    if (teamId) {
+      try {
+        const res = await runOpenClaw(["agents", "list", "--json"]);
+        if (res.ok) {
+          const items = JSON.parse(res.stdout) as Array<{ id?: unknown }>;
+          existingAgentIds = new Set(items.map((a) => String(a.id ?? "").trim()).filter(Boolean));
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    function isTaken(role: string) {
+      if (usedRoles.has(role)) return true;
+      if (teamId) {
+        const agentId = `${teamId}-${role}`;
+        if (existingAgentIds.has(agentId)) return true;
+      }
+      return false;
+    }
+
+    let nextRole = baseRole;
+    if (isTaken(nextRole)) {
+      let i = Math.max(2, n + 1);
+      while (isTaken(`${baseRole}-${i}`)) i++;
+      nextRole = `${baseRole}-${i}`;
+    }
+
+    const baseName = typeof (base as { name?: unknown }).name === "string" ? String((base as { name?: unknown }).name) : "";
+    const autoSuffix = nextRole === baseRole ? "" : String(nextRole.slice(baseRole.length + 1));
+    const nextName = name || (baseName ? `${baseName}${autoSuffix ? ` ${autoSuffix}` : ""}` : "");
+
+    const clone = { ...base, role: nextRole, ...(nextName ? { name: nextName } : {}) };
+    nextAgents.push(clone);
   }
 
   // Keep stable order by role.
@@ -80,5 +141,16 @@ export async function POST(req: Request) {
 
   await fs.writeFile(filePath, nextMd, "utf8");
 
-  return NextResponse.json({ ok: true, recipeId, filePath, agents: nextAgents, content: nextMd });
+  // Best-effort: return the last-added role so the client can install immediately.
+  let addedRole: string | null = null;
+  if (op === "add") addedRole = normalizeRole(String(body.role ?? ""));
+  if (op === "addLike") {
+    // In addLike we pushed a clone as the last entry.
+    addedRole = String((nextAgents[nextAgents.length - 1] as { role?: unknown } | undefined)?.role ?? "").trim() || null;
+  }
+
+  const teamId = typeof body.teamId === "string" ? body.teamId.trim() : "";
+  const addedAgentId = teamId && addedRole ? `${teamId}-${addedRole}` : null;
+
+  return NextResponse.json({ ok: true, recipeId, filePath, agents: nextAgents, content: nextMd, addedRole, addedAgentId });
 }
