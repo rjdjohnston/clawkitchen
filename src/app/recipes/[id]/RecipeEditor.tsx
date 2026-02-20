@@ -347,7 +347,7 @@ export default function RecipeEditor({ recipeId }: { recipeId: string }) {
               <div>
                 <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Team recipe</div>
                 <div className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">
-                  Create a team from this recipe, and preview what will be scaffolded.
+                  Create a team from this recipe. Creating a Team runs <code>openclaw recipes scaffold-team</code> with <code>--apply-config</code>.
                 </div>
               </div>
               <button
@@ -366,6 +366,24 @@ export default function RecipeEditor({ recipeId }: { recipeId: string }) {
             ) : null}
 
             <div className="mt-4 space-y-3">
+              <details className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15 p-3" open>
+                <summary className="cursor-pointer text-sm font-medium text-[color:var(--ck-text-primary)]">
+                  Recipe information
+                </summary>
+                <div className="mt-2 space-y-1 text-xs text-[color:var(--ck-text-secondary)]">
+                  <div>
+                    <span className="text-[color:var(--ck-text-tertiary)]">Recipe id:</span> {fm?.id ?? recipe.id}
+                  </div>
+                  <div>
+                    <span className="text-[color:var(--ck-text-tertiary)]">Version:</span> {fm?.version ?? "(unknown)"}
+                  </div>
+                  <div>
+                    <span className="text-[color:var(--ck-text-tertiary)]">Team id:</span> {fm?.team?.teamId ?? "(not set)"}
+                  </div>
+                  {fm?.description ? <div className="whitespace-pre-wrap">{fm.description}</div> : null}
+                </div>
+              </details>
+
               <details className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15 p-3">
                 <summary className="cursor-pointer text-sm font-medium text-[color:var(--ck-text-primary)]">
                   Agents ({fm?.agents?.length ?? 0})
@@ -455,28 +473,6 @@ export default function RecipeEditor({ recipeId }: { recipeId: string }) {
                   ) : null}
                 </div>
               </details>
-
-              <details className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15 p-3" open>
-                <summary className="cursor-pointer text-sm font-medium text-[color:var(--ck-text-primary)]">
-                  Metadata
-                </summary>
-                <div className="mt-2 space-y-1 text-xs text-[color:var(--ck-text-secondary)]">
-                  <div>
-                    <span className="text-[color:var(--ck-text-tertiary)]">Recipe id:</span> {fm?.id ?? recipe.id}
-                  </div>
-                  <div>
-                    <span className="text-[color:var(--ck-text-tertiary)]">Version:</span> {fm?.version ?? "(unknown)"}
-                  </div>
-                  <div>
-                    <span className="text-[color:var(--ck-text-tertiary)]">Team id:</span> {fm?.team?.teamId ?? "(not set)"}
-                  </div>
-                  {fm?.description ? <div className="whitespace-pre-wrap">{fm.description}</div> : null}
-                </div>
-              </details>
-
-              <p className="text-xs text-[color:var(--ck-text-tertiary)]">
-                Create Team runs <code>openclaw recipes scaffold-team</code> with <code>--apply-config</code>.
-              </p>
             </div>
           </div>
         ) : (
@@ -485,7 +481,7 @@ export default function RecipeEditor({ recipeId }: { recipeId: string }) {
               <div>
                 <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Agent recipe</div>
                 <div className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">
-                  Create an agent from this recipe, and preview what will be scaffolded.
+                  Create an agent from this recipe. Creating an Agent runs <code>openclaw recipes scaffold</code> with <code>--apply-config</code>.
                 </div>
               </div>
               <button
@@ -504,6 +500,21 @@ export default function RecipeEditor({ recipeId }: { recipeId: string }) {
             ) : null}
 
             <div className="mt-4 space-y-3">
+              <details className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15 p-3" open>
+                <summary className="cursor-pointer text-sm font-medium text-[color:var(--ck-text-primary)]">
+                  Recipe information
+                </summary>
+                <div className="mt-2 space-y-1 text-xs text-[color:var(--ck-text-secondary)]">
+                  <div>
+                    <span className="text-[color:var(--ck-text-tertiary)]">Recipe id:</span> {afm?.id ?? recipe.id}
+                  </div>
+                  <div>
+                    <span className="text-[color:var(--ck-text-tertiary)]">Version:</span> {afm?.version ?? "(unknown)"}
+                  </div>
+                  {afm?.description ? <div className="whitespace-pre-wrap">{afm.description}</div> : null}
+                </div>
+              </details>
+
               <details className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15 p-3">
                 <summary className="cursor-pointer text-sm font-medium text-[color:var(--ck-text-primary)]">
                   Files ({Object.keys(afm?.templates ?? {}).length})
@@ -524,25 +535,6 @@ export default function RecipeEditor({ recipeId }: { recipeId: string }) {
                   )}
                 </div>
               </details>
-
-              <details className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15 p-3" open>
-                <summary className="cursor-pointer text-sm font-medium text-[color:var(--ck-text-primary)]">
-                  Metadata
-                </summary>
-                <div className="mt-2 space-y-1 text-xs text-[color:var(--ck-text-secondary)]">
-                  <div>
-                    <span className="text-[color:var(--ck-text-tertiary)]">Recipe id:</span> {afm?.id ?? recipe.id}
-                  </div>
-                  <div>
-                    <span className="text-[color:var(--ck-text-tertiary)]">Version:</span> {afm?.version ?? "(unknown)"}
-                  </div>
-                  {afm?.description ? <div className="whitespace-pre-wrap">{afm.description}</div> : null}
-                </div>
-              </details>
-
-              <p className="text-xs text-[color:var(--ck-text-tertiary)]">
-                Create Agent runs <code>openclaw recipes scaffold</code> with <code>--apply-config</code>.
-              </p>
             </div>
           </div>
         )}
