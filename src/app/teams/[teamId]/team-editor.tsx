@@ -691,30 +691,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                   const json = await res.json();
                   if (!res.ok || !json.ok) throw new Error(json.error || "Failed updating agents list");
                   setContent(String(json.content ?? content));
-
-                  // Apply to config + scaffold any new agent workspace (without overwriting existing files).
-                  try {
-                    const sync = await fetch("/api/scaffold", {
-                      method: "POST",
-                      headers: { "content-type": "application/json" },
-                      body: JSON.stringify({
-                        kind: "team",
-                        recipeId: toId.trim(),
-                        teamId: teamId,
-                        applyConfig: true,
-                        overwrite: false,
-                        allowExisting: true,
-                        cronInstallChoice: "no",
-                      }),
-                    });
-                    const syncJson = await sync.json();
-                    if (!sync.ok) throw new Error(syncJson.error || "Failed to apply config");
-                  } catch (e: unknown) {
-                    // Non-fatal; recipe was still updated.
-                    flashMessage(e instanceof Error ? e.message : String(e), "error");
-                  }
-
-                  flashMessage(`Added role to ${toId}`, "success");
+                  flashMessage(`Updated agents list in ${toId}`, "success");
                 } catch (e: unknown) {
                   flashMessage(e instanceof Error ? e.message : String(e), "error");
                 } finally {

@@ -41,7 +41,7 @@ const TEAM_META_FILE = "team.json";
 const AGENT_META_FILE = "agent.json";
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as ReqBody & { cronInstallChoice?: "yes" | "no"; allowExisting?: boolean };
+  const body = (await req.json()) as ReqBody & { cronInstallChoice?: "yes" | "no" };
 
   const args: string[] = ["recipes", body.kind === "team" ? "scaffold-team" : "scaffold", body.recipeId];
 
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
     // 1) Do not allow creating a team/agent with an id that collides with ANY recipe id.
     //    (BUT allow when overwrite=true, which is used for re-scaffolding/publish flows.)
     // 2) Do not allow creating a team/agent that already exists unless overwrite was explicitly set.
-    if (!body.overwrite && !body.allowExisting) {
+    if (!body.overwrite) {
       const recipesRes = await runOpenClaw(["recipes", "list"]);
       if (recipesRes.ok) {
         try {
@@ -107,7 +107,7 @@ export async function POST(req: Request) {
       }
     }
 
-    if (!body.overwrite && !body.allowExisting) {
+    if (!body.overwrite) {
       if (body.kind === "agent") {
         const agentId = String(body.agentId ?? "").trim();
         if (agentId) {
