@@ -73,8 +73,9 @@ export async function POST(req: Request) {
   try {
     // Collision guards: site-wide rules.
     // 1) Do not allow creating a team/agent with an id that collides with ANY recipe id.
+    //    (BUT allow when overwrite=true, which is used for re-scaffolding/publish flows.)
     // 2) Do not allow creating a team/agent that already exists unless overwrite was explicitly set.
-    {
+    if (!body.overwrite) {
       const recipesRes = await runOpenClaw(["recipes", "list"]);
       if (recipesRes.ok) {
         try {
