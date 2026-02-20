@@ -738,6 +738,51 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                   const json = await res.json();
                   if (!res.ok || !json.ok) throw new Error(json.error || "Failed updating agents list");
                   setContent(String(json.content ?? content));
+
+                  // Immediately install/create the new agent(s) by applying config and scaffolding missing files.
+                  // Do not overwrite existing recipe-managed files.
+                  try {
+                    const sync = await fetch("/api/scaffold", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({
+                        kind: "team",
+                        recipeId: toId.trim(),
+                        teamId,
+                        applyConfig: true,
+                        overwrite: false,
+                        allowExisting: true,
+                        cronInstallChoice: "no",
+                      }),
+                    });
+                    const syncJson = await sync.json();
+                    if (!sync.ok) throw new Error(syncJson.error || "Failed to apply config / scaffold team");
+                  } catch (e: unknown) {
+                    // Non-fatal: recipe change is still saved.
+                    flashMessage(e instanceof Error ? e.message : String(e), "error");
+                  }
+
+                  // Refresh detected agents list.
+                  try {
+                    const agentsRes = await fetch("/api/agents", { cache: "no-store" });
+                    const agentsJson = (await agentsRes.json()) as { agents?: unknown[] };
+                    if (agentsRes.ok) {
+                      const all = Array.isArray(agentsJson.agents) ? agentsJson.agents : [];
+                      const filtered = all.filter((a) => String((a as { id?: unknown }).id ?? "").startsWith(`${teamId}-`));
+                      setTeamAgents(
+                        filtered.map((a) => {
+                          const agent = a as { id?: unknown; identityName?: unknown };
+                          return {
+                            id: String(agent.id ?? ""),
+                            identityName: typeof agent.identityName === "string" ? agent.identityName : undefined,
+                          };
+                        }),
+                      );
+                    }
+                  } catch {
+                    // ignore
+                  }
+
                   flashMessage(`Updated agents list in ${toId}`, "success");
                 } catch (e: unknown) {
                   flashMessage(e instanceof Error ? e.message : String(e), "error");
