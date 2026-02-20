@@ -357,6 +357,7 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
       ) : null}
       {teamId ? <div className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">Team: {teamId}</div> : null}
 
+
       <div className="mt-6 flex flex-wrap gap-2">
         {(
           [
@@ -616,6 +617,7 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
                   </button>
                 </div>
               </div>
+
               <textarea
                 value={fileContent}
                 onChange={(e) => setFileContent(e.target.value)}
