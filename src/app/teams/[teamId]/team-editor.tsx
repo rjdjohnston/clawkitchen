@@ -651,6 +651,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                     await ensureCustomRecipeExists({ overwrite: false });
                   } catch (e: unknown) {
                     // If the custom recipe already exists, proceed; we only needed to ensure a workspace file exists.
+                    // Note: /api/recipes/clone returns 409 in this case.
                     const msg = e instanceof Error ? e.message : String(e);
                     if (!/Recipe id already exists:/i.test(msg)) throw e;
                   }
