@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ToastProvider } from "@/components/ToastProvider";
+import { ScaffoldOverlayProvider } from "@/components/ScaffoldOverlayProvider";
 
 function NavLink({ href, label }: { href: string; label: string }) {
   const pathname = usePathname();
@@ -27,7 +28,8 @@ function NavLink({ href, label }: { href: string; label: string }) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <ToastProvider>
-      <div className="min-h-screen">
+      <ScaffoldOverlayProvider>
+        <div className="min-h-screen">
       <header className="sticky top-0 z-50 border-b border-[color:var(--ck-border-subtle)] bg-[color:var(--ck-bg-glass)] backdrop-blur-[var(--ck-glass-blur)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
           <div className="flex items-center gap-3">
@@ -60,6 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
     </div>
+      </ScaffoldOverlayProvider>
     </ToastProvider>
   );
 }

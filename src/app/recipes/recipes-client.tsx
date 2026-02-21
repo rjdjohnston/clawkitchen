@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ScaffoldOverlay, type ScaffoldOverlayStep } from "@/components/ScaffoldOverlay";
+import { useScaffoldOverlay } from "@/components/ScaffoldOverlayProvider";
 import { useToast } from "@/components/ToastProvider";
 import { CreateTeamModal } from "./CreateTeamModal";
 import { CreateAgentModal } from "./CreateAgentModal";
@@ -123,10 +123,7 @@ export default function RecipesClient({
   installedAgentIds: string[];
 }) {
   const toast = useToast();
-
-  const [overlayOpen, setOverlayOpen] = useState(false);
-  const [overlayStep, setOverlayStep] = useState<ScaffoldOverlayStep>(1);
-  const [overlayDetails, setOverlayDetails] = useState<string>("");
+  const overlay = useScaffoldOverlay();
   const router = useRouter();
 
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -305,9 +302,7 @@ export default function RecipesClient({
     setCreateBusy(true);
     setCreateError(null);
 
-    setOverlayOpen(true);
-    setOverlayStep(1);
-    setOverlayDetails("");
+    overlay.show({ step: 1, details: "" });
 
     try {
       const res = await fetch("/api/scaffold", {
@@ -325,10 +320,10 @@ export default function RecipesClient({
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(String(json.error || "Create team failed"));
 
-      setOverlayStep(2);
+      overlay.setStep(2);
 
       const stderr = typeof json.stderr === "string" ? json.stderr : "";
-      if (stderr.trim()) setOverlayDetails(stderr.trim());
+      if (stderr.trim()) overlay.setDetails(stderr.trim());
 
       // Some CLI failures currently still surface as { ok: true, stderr: "...Error: ..." }.
       // Treat those as hard failures so we don't navigate into a broken team page.
@@ -339,7 +334,7 @@ export default function RecipesClient({
       // If scaffolding changed config, the gateway may need a restart. During restart, new pages
       // will throw transient errors (RSC/markdown fetches/etc.), so keep the overlay up.
       if (/Restart required:/i.test(stderr)) {
-        setOverlayStep(3);
+        overlay.setStep(3);
         try {
           await fetch("/api/gateway/restart", { method: "POST" });
         } catch {
@@ -350,7 +345,8 @@ export default function RecipesClient({
 
       // Also wait until the new team's recipe+provenance exist before navigating.
       // This avoids the destination page throwing "raw markdown" load errors.
-      await waitForTeamPageReady(t, { timeoutMs: 60_000 });
+      const ready = await waitForTeamPageReady(t, { timeoutMs: 60_000 });
+      if (!ready) throw new Error("Team is taking too long to become ready. Please try again.");
 
       toast.push({ kind: "success", message: `Created team: ${t}` });
       setCreateOpen(false);
@@ -358,10 +354,9 @@ export default function RecipesClient({
       // Navigate only after restart/readiness to avoid the ugly error+reload UX.
       router.push(`/teams/${encodeURIComponent(t)}`);
 
-      // Give the next page a beat to mount before removing the overlay.
-      setTimeout(() => setOverlayOpen(false), 500);
+      // Keep the overlay up across navigation; the destination page will clear it once loaded.
     } catch (e: unknown) {
-      setOverlayOpen(false);
+      overlay.hide();
       const msg = e instanceof Error ? e.message : String(e);
       setCreateError(msg);
       toast.push({ kind: "error", message: msg });
@@ -387,9 +382,7 @@ export default function RecipesClient({
     setCreateAgentBusy(true);
     setCreateAgentError(null);
 
-    setOverlayOpen(true);
-    setOverlayStep(1);
-    setOverlayDetails("");
+    overlay.show({ step: 1, details: "" });
 
     try {
       const res = await fetch("/api/scaffold", {
@@ -407,17 +400,17 @@ export default function RecipesClient({
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(String(json.error || "Create agent failed"));
 
-      setOverlayStep(2);
+      overlay.setStep(2);
 
       const stderr = typeof json.stderr === "string" ? json.stderr : "";
-      if (stderr.trim()) setOverlayDetails(stderr.trim());
+      if (stderr.trim()) overlay.setDetails(stderr.trim());
 
       if (/Failed to start CLI:/i.test(stderr) || /\bError: /i.test(stderr)) {
         throw new Error(stderr.trim() || "Scaffold failed");
       }
 
       if (/Restart required:/i.test(stderr)) {
-        setOverlayStep(3);
+        overlay.setStep(3);
         try {
           await fetch("/api/gateway/restart", { method: "POST" });
         } catch {
@@ -430,9 +423,9 @@ export default function RecipesClient({
       setCreateAgentOpen(false);
 
       router.push(`/agents/${encodeURIComponent(a)}`);
-      setTimeout(() => setOverlayOpen(false), 500);
+      // Keep the overlay up across navigation; the destination page will clear it once loaded.
     } catch (e: unknown) {
-      setOverlayOpen(false);
+      overlay.hide();
       const msg = e instanceof Error ? e.message : String(e);
       setCreateAgentError(msg);
       toast.push({ kind: "error", message: msg });
@@ -443,7 +436,6 @@ export default function RecipesClient({
 
   return (
     <>
-      <ScaffoldOverlay open={overlayOpen} step={overlayStep} details={overlayDetails} />
       <div className="mt-8 space-y-10">
         <section>
           <h2 className="text-xl font-semibold tracking-tight text-[color:var(--ck-text-primary)]">Custom recipes</h2>
