@@ -13,18 +13,31 @@ const stepLabel: Record<ScaffoldOverlayStep, string> = {
 export function ScaffoldOverlay({
   open,
   step,
-  details,
+  onDismiss,
 }: {
   open: boolean;
   step: ScaffoldOverlayStep;
-  details?: string;
+  onDismiss?: () => void;
 }) {
   if (!open) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[9999]">
-      {/* Solid overlay (no seeing through during restarts/partial renders). */}
-      <div className="fixed inset-0 bg-white dark:bg-black" />
+      {/* Slightly transparent full-screen overlay so we hide the app while still showing a hint of context. */}
+      <div className="fixed inset-0 bg-white/95 dark:bg-black/95" />
+
+      {onDismiss ? (
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="fixed right-4 top-4 rounded-full border border-white/10 bg-[color:var(--ck-bg-glass)] px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-[color:var(--ck-bg-glass-strong)]"
+          aria-label="Dismiss loading overlay"
+          title="Dismiss"
+        >
+          Esc
+        </button>
+      ) : null}
+
       <div className="fixed inset-0 flex items-center justify-center p-6 sm:p-10">
         <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[color:var(--ck-bg-glass-strong)] p-8 sm:p-10 shadow-[var(--ck-shadow-2)]">
           <div className="text-2xl font-semibold text-[color:var(--ck-text-primary)]">Claw Kitchen</div>
@@ -55,14 +68,7 @@ export function ScaffoldOverlay({
             })}
           </div>
 
-          {details ? (
-            <details className="mt-8">
-              <summary className="cursor-pointer select-none text-sm text-[color:var(--ck-text-tertiary)]">Details</summary>
-              <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/30 p-4 text-xs text-[color:var(--ck-text-secondary)]">
-                {details}
-              </pre>
-            </details>
-          ) : null}
+          {/* Details removed — avoid noisy/scrolling stderr in the primary UX. */}
         </div>
       </div>
     </div>,

@@ -424,7 +424,13 @@ export default function RecipesClient({
 
   return (
     <>
-      <ScaffoldOverlay open={overlayOpen} step={overlayStep} details={overlayDetails} />
+      <ScaffoldOverlay
+        open={overlayOpen}
+        step={overlayStep}
+        onDismiss={() => {
+          setOverlayOpen(false);
+        }}
+      />
       <div className="mt-8 space-y-10">
         <section>
           <h2 className="text-xl font-semibold tracking-tight text-[color:var(--ck-text-primary)]">Custom recipes</h2>
