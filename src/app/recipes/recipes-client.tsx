@@ -228,8 +228,20 @@ export default function RecipesClient({
 
       toast.push({ kind: "success", message: `Created team: ${t}` });
       setCreateOpen(false);
+
+      // If scaffolding changed config, the gateway may need a restart before the new team
+      // consistently shows up across pages.
+      const stderr = typeof json.stderr === "string" ? json.stderr : "";
+      if (/Restart required:/i.test(stderr)) {
+        toast.push({ kind: "info", message: "Restarting gateway to apply team config…" });
+        try {
+          await fetch("/api/gateway/restart", { method: "POST" });
+        } catch {
+          // best-effort; navigation can still work but may be inconsistent until restart
+        }
+      }
+
       router.push(`/teams/${encodeURIComponent(t)}`);
-      router.refresh();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setCreateError(msg);
@@ -274,8 +286,18 @@ export default function RecipesClient({
 
       toast.push({ kind: "success", message: `Created agent: ${a}` });
       setCreateAgentOpen(false);
+
+      const stderr = typeof json.stderr === "string" ? json.stderr : "";
+      if (/Restart required:/i.test(stderr)) {
+        toast.push({ kind: "info", message: "Restarting gateway to apply agent config…" });
+        try {
+          await fetch("/api/gateway/restart", { method: "POST" });
+        } catch {
+          // best-effort
+        }
+      }
+
       router.push(`/agents/${encodeURIComponent(a)}`);
-      router.refresh();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setCreateAgentError(msg);
