@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { MoonIcon, SunIcon } from "@/components/icons";
 
 export type Theme = "light" | "dark";
 
 const STORAGE_KEY = "ck-theme";
 
 function readInitialTheme(): Theme {
-  if (typeof window === "undefined") return "light";
+  // Default: dark mode.
+  if (typeof window === "undefined") return "dark";
   const saved = window.localStorage.getItem(STORAGE_KEY);
-  return saved === "dark" ? "dark" : "light";
+  return saved === "light" ? "light" : "dark";
 }
 
 function applyTheme(theme: Theme) {
@@ -28,15 +30,24 @@ export function ThemeToggle() {
     setTheme((t) => (t === "dark" ? "light" : "dark"));
   }
 
+  const label = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+
   return (
     <button
       type="button"
       onClick={toggle}
-      className="rounded-[var(--ck-radius-sm)] border border-[color:var(--ck-border-subtle)] bg-[color:var(--ck-bg-glass)] px-3 py-1.5 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-[color:var(--ck-bg-glass-strong)]"
-      aria-label="Toggle theme"
-      title="Toggle theme"
+      className="grid h-9 w-9 place-items-center rounded-full border border-[color:var(--ck-border-subtle)] bg-[color:var(--ck-bg-glass)] text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-[color:var(--ck-bg-glass-strong)]"
+      aria-label={label}
+      title={label}
     >
-      <span suppressHydrationWarning>{theme === "dark" ? "Dark" : "Light"}</span>
+      <span className="sr-only" suppressHydrationWarning>
+        {label}
+      </span>
+      {theme === "dark" ? (
+        <MoonIcon className="h-4.5 w-4.5" />
+      ) : (
+        <SunIcon className="h-4.5 w-4.5" />
+      )}
     </button>
   );
 }

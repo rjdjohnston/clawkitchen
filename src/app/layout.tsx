@@ -30,7 +30,7 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "(function(){try{var t=localStorage.getItem('ck-theme');if(t==='dark'){document.documentElement.dataset.theme='dark';}}catch(e){}})();",
+              "(function(){try{var t=localStorage.getItem('ck-theme');var theme=(t==='light')?'light':'dark';document.documentElement.dataset.theme=theme;}catch(e){document.documentElement.dataset.theme='dark';}})();",
           }}
         />
       </head>
