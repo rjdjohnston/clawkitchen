@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { createPortal } from "react-dom";
 
 export type ScaffoldOverlayStep = 1 | 2 | 3;
@@ -19,6 +20,23 @@ export function ScaffoldOverlay({
   step: ScaffoldOverlayStep;
   onDismiss?: () => void;
 }) {
+  useEffect(() => {
+    if (!open) return;
+    if (!onDismiss) return;
+
+    const dismiss = onDismiss;
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        dismiss();
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onDismiss]);
+
   if (!open) return null;
 
   return createPortal(
