@@ -24,7 +24,7 @@ export function ScaffoldOverlay({
   return createPortal(
     <div className="fixed inset-0 z-[500]">
       {/* Full blackout/whiteout to hide the app while gateway/Kitchen may be restarting. */}
-      <div className="fixed inset-0 bg-[color:var(--ck-bg)]" />
+      <div className="fixed inset-0 bg-[color:var(--ck-bg)] opacity-100" />
       <div className="fixed inset-0 flex items-center justify-center p-6 sm:p-10">
         <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[color:var(--ck-bg-glass-strong)] p-8 sm:p-10 shadow-[var(--ck-shadow-2)]">
           <div className="text-2xl font-semibold text-[color:var(--ck-text-primary)]">Claw Kitchen</div>
