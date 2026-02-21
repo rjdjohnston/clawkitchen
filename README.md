@@ -21,22 +21,15 @@ openclaw plugins install @jiggai/kitchen
 
 # If you use a plugin allowlist (plugins.allow), you must explicitly trust it:
 openclaw config get plugins.allow --json
-# then add "kitchen" and set it back, e.g.
+# then add "kitchen" (and "recipes") and set it back, e.g.
 openclaw config set plugins.allow --json '["memory-core","telegram","recipes","kitchen"]'
 ```
-
-**Developer/testing:** you can also load it directly from a local repo path via `plugins.load.paths`.
 
 Edit your OpenClaw config (`~/.openclaw/openclaw.json`) and add:
 
 ```json5
 {
   "plugins": {
-    // Local developers only
-    "load": {
-      "paths": ["/home/control/clawkitchen"]
-    },
-
     // If you use plugins.allow, ensure kitchen is allowed.
     "allow": ["kitchen", "recipes"],
 
