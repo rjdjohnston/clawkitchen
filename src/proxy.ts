@@ -2,7 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Kitchen is a local operator console whose data can change outside Next.js (CLI actions,
 // config edits, gateway restarts). We should never serve cached HTML/data for app routes.
-export function middleware(req: NextRequest) {
+//
+// NOTE: In Next.js 16, middleware has been renamed to `proxy`.
+export function proxy(req: NextRequest) {
   const res = NextResponse.next();
 
   // Prevent browser/proxy caching of HTML and route responses.
