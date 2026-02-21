@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { DeleteTeamModal } from "./DeleteTeamModal";
 import { PublishChangesModal } from "./PublishChangesModal";
 import { useToast } from "@/components/ToastProvider";
-import { useScaffoldOverlay } from "@/components/ScaffoldOverlayProvider";
 
 type RecipeListItem = {
   id: string;
@@ -116,7 +115,6 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [loadingSource, setLoadingSource] = useState(false);
   const [recipeLoadError, setRecipeLoadError] = useState<string>("");
   const toast = useToast();
-  const overlay = useScaffoldOverlay();
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -260,9 +258,6 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
         // Render ASAP; load the heavier per-tab data in the background.
         setLoading(false);
-
-        // If we navigated here after scaffold/restart, clear the global overlay once the page is alive.
-        overlay.hide();
 
         void (async () => {
           setTeamFilesLoading(true);

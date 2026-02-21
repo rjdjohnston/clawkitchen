@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useScaffoldOverlay } from "@/components/ScaffoldOverlayProvider";
+import { ScaffoldOverlay, type ScaffoldOverlayStep } from "@/components/ScaffoldOverlay";
 import { useToast } from "@/components/ToastProvider";
 import { CreateTeamModal } from "./CreateTeamModal";
 import { CreateAgentModal } from "./CreateAgentModal";
@@ -123,7 +123,10 @@ export default function RecipesClient({
   installedAgentIds: string[];
 }) {
   const toast = useToast();
-  const overlay = useScaffoldOverlay();
+
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const [overlayStep, setOverlayStep] = useState<ScaffoldOverlayStep>(1);
+  const [overlayDetails, setOverlayDetails] = useState<string>("");
   const router = useRouter();
 
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -216,74 +219,30 @@ export default function RecipesClient({
     const timeoutMs = opts?.timeoutMs ?? 30_000;
     const started = Date.now();
 
-    let delayMs = 250;
-    let consecutiveNetworkFails = 0;
-
-    async function fetchJsonWithTimeout(url: string, ms: number) {
-      const ctl = new AbortController();
-      const t = setTimeout(() => ctl.abort(), ms);
-      try {
-        const res = await fetch(url, { cache: "no-store", signal: ctl.signal });
-
-        // When the gateway is restarting, requests can return 200 with an empty/aborted body.
-        // Using res.text() avoids throwing "Unexpected end of JSON input".
-        const raw = await res.text();
-        if (!raw.trim()) throw new Error("empty-response");
-        const json = JSON.parse(raw) as unknown;
-
-        return { res, json };
-      } finally {
-        clearTimeout(t);
-      }
-    }
-
     while (Date.now() - started < timeoutMs) {
       try {
-        // 1) Check recipes first.
-        const recipesOut = await fetchJsonWithTimeout("/api/recipes", 5_000);
-        const recipesJson = recipesOut.json as { recipes?: Array<{ id?: unknown; kind?: unknown }> };
+        const [recipesRes, metaRes] = await Promise.all([
+          fetch("/api/recipes", { cache: "no-store" }),
+          fetch(`/api/teams/meta?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" }),
+        ]);
+
+        const recipesJson = (await recipesRes.json()) as { recipes?: Array<{ id?: unknown; kind?: unknown }> };
         const list = Array.isArray(recipesJson.recipes) ? recipesJson.recipes : [];
         const hasRecipe = list.some((r) => String(r.id ?? "") === teamId && String(r.kind ?? "") === "team");
 
-        // If the recipe isn't visible yet, don't hammer meta.
-        if (!hasRecipe) {
-          consecutiveNetworkFails = 0;
-          await new Promise((r) => setTimeout(r, delayMs));
-          delayMs = Math.min(2000, Math.round(delayMs * 1.5));
-          continue;
-        }
+        const metaJson = (await metaRes.json()) as { ok?: boolean; missing?: boolean };
+        const hasMeta = Boolean(metaRes.ok && metaJson.ok && !metaJson.missing);
 
-        // 2) Once recipe exists, try meta (required) with timeout.
-        // This avoids navigating into the Team page while provenance is still being written,
-        // which was triggering the "raw markdown" load error.
-        const metaOut = await fetchJsonWithTimeout(`/api/teams/meta?teamId=${encodeURIComponent(teamId)}`, 5_000);
-        const metaJson = metaOut.json as { ok?: boolean; missing?: boolean };
-        const hasMeta = Boolean(metaOut.res.ok && metaJson.ok && !metaJson.missing);
-        if (hasMeta) return true;
-
-        consecutiveNetworkFails = 0;
+        if (hasRecipe && hasMeta) return true;
       } catch {
-        // Likely aborted/timeout during restart.
-        consecutiveNetworkFails += 1;
-
-        // If we keep failing, check healthz and back off.
-        if (consecutiveNetworkFails >= 3) {
-          try {
-            await fetchJsonWithTimeout("/healthz", 2_500);
-            consecutiveNetworkFails = 0;
-          } catch {
-            // still down
-          }
-        }
+        // ignore
       }
 
-      await new Promise((r) => setTimeout(r, delayMs));
-      delayMs = Math.min(2000, Math.round(delayMs * 1.5));
+      await new Promise((r) => setTimeout(r, 500));
     }
 
     return false;
   }
-
 
   async function confirmCreateTeam() {
     const recipe = createRecipe;
@@ -302,7 +261,9 @@ export default function RecipesClient({
     setCreateBusy(true);
     setCreateError(null);
 
-    overlay.show({ step: 1, details: "" });
+    setOverlayOpen(true);
+    setOverlayStep(1);
+    setOverlayDetails("");
 
     try {
       const res = await fetch("/api/scaffold", {
@@ -320,10 +281,10 @@ export default function RecipesClient({
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(String(json.error || "Create team failed"));
 
-      overlay.setStep(2);
+      setOverlayStep(2);
 
       const stderr = typeof json.stderr === "string" ? json.stderr : "";
-      if (stderr.trim()) overlay.setDetails(stderr.trim());
+      if (stderr.trim()) setOverlayDetails(stderr.trim());
 
       // Some CLI failures currently still surface as { ok: true, stderr: "...Error: ..." }.
       // Treat those as hard failures so we don't navigate into a broken team page.
@@ -334,7 +295,7 @@ export default function RecipesClient({
       // If scaffolding changed config, the gateway may need a restart. During restart, new pages
       // will throw transient errors (RSC/markdown fetches/etc.), so keep the overlay up.
       if (/Restart required:/i.test(stderr)) {
-        overlay.setStep(3);
+        setOverlayStep(3);
         try {
           await fetch("/api/gateway/restart", { method: "POST" });
         } catch {
@@ -345,8 +306,7 @@ export default function RecipesClient({
 
       // Also wait until the new team's recipe+provenance exist before navigating.
       // This avoids the destination page throwing "raw markdown" load errors.
-      const ready = await waitForTeamPageReady(t, { timeoutMs: 60_000 });
-      if (!ready) throw new Error("Team is taking too long to become ready. Please try again.");
+      await waitForTeamPageReady(t, { timeoutMs: 60_000 });
 
       toast.push({ kind: "success", message: `Created team: ${t}` });
       setCreateOpen(false);
@@ -354,9 +314,10 @@ export default function RecipesClient({
       // Navigate only after restart/readiness to avoid the ugly error+reload UX.
       router.push(`/teams/${encodeURIComponent(t)}`);
 
-      // Keep the overlay up across navigation; the destination page will clear it once loaded.
+      // Give the next page a beat to mount before removing the overlay.
+      setTimeout(() => setOverlayOpen(false), 500);
     } catch (e: unknown) {
-      overlay.hide();
+      setOverlayOpen(false);
       const msg = e instanceof Error ? e.message : String(e);
       setCreateError(msg);
       toast.push({ kind: "error", message: msg });
@@ -382,7 +343,9 @@ export default function RecipesClient({
     setCreateAgentBusy(true);
     setCreateAgentError(null);
 
-    overlay.show({ step: 1, details: "" });
+    setOverlayOpen(true);
+    setOverlayStep(1);
+    setOverlayDetails("");
 
     try {
       const res = await fetch("/api/scaffold", {
@@ -400,17 +363,17 @@ export default function RecipesClient({
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(String(json.error || "Create agent failed"));
 
-      overlay.setStep(2);
+      setOverlayStep(2);
 
       const stderr = typeof json.stderr === "string" ? json.stderr : "";
-      if (stderr.trim()) overlay.setDetails(stderr.trim());
+      if (stderr.trim()) setOverlayDetails(stderr.trim());
 
       if (/Failed to start CLI:/i.test(stderr) || /\bError: /i.test(stderr)) {
         throw new Error(stderr.trim() || "Scaffold failed");
       }
 
       if (/Restart required:/i.test(stderr)) {
-        overlay.setStep(3);
+        setOverlayStep(3);
         try {
           await fetch("/api/gateway/restart", { method: "POST" });
         } catch {
@@ -423,9 +386,9 @@ export default function RecipesClient({
       setCreateAgentOpen(false);
 
       router.push(`/agents/${encodeURIComponent(a)}`);
-      // Keep the overlay up across navigation; the destination page will clear it once loaded.
+      setTimeout(() => setOverlayOpen(false), 500);
     } catch (e: unknown) {
-      overlay.hide();
+      setOverlayOpen(false);
       const msg = e instanceof Error ? e.message : String(e);
       setCreateAgentError(msg);
       toast.push({ kind: "error", message: msg });
@@ -436,6 +399,7 @@ export default function RecipesClient({
 
   return (
     <>
+      <ScaffoldOverlay open={overlayOpen} step={overlayStep} details={overlayDetails} />
       <div className="mt-8 space-y-10">
         <section>
           <h2 className="text-xl font-semibold tracking-tight text-[color:var(--ck-text-primary)]">Custom recipes</h2>
