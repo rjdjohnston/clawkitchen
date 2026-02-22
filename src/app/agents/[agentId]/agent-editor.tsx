@@ -109,7 +109,7 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
   const [agentFiles, setAgentFiles] = useState<Array<FileEntry & { required?: boolean; rationale?: string }>>([]);
   const [agentFilesLoading, setAgentFilesLoading] = useState(false);
   const [showOptionalFiles, setShowOptionalFiles] = useState(false);
-  const [fileName, setFileName] = useState<string>("IDENTITY.md");
+  const [fileName, setFileName] = useState<string>("SOUL.md");
   const [fileContent, setFileContent] = useState<string>("");
 
   const teamId = agentId.includes("-") ? agentId.split("-").slice(0, -1).join("-") : "";
