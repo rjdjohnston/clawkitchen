@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node scripts/copy-standalone-static.mjs",
     "start": "next start",
     "lint": "eslint",
     "smoke:goals": "node scripts/goals-smoke.mjs",
