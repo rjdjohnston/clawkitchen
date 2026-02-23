@@ -108,9 +108,9 @@ export async function POST(req: Request) {
   if (scaffold) {
     const cmd =
       kind === "team"
-        ? ["recipes", "scaffold-team", toId, "--team-id", toId, "--overwrite"]
+        ? ["recipes", "scaffold-team", toId, "--team-id", toId, "--overwrite", "--overwrite-recipe"]
         : kind === "agent"
-          ? ["recipes", "scaffold", toId, "--agent-id", toId, "--overwrite"]
+          ? ["recipes", "scaffold", toId, "--agent-id", toId, "--overwrite", "--overwrite-recipe"]
           : null;
 
     if (!cmd) {
