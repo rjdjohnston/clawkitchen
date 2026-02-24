@@ -15,6 +15,13 @@ function extractStdout(err: { stdout?: unknown }): string {
   return "";
 }
 
+function resolveExitCode(res: { exitCode?: unknown; code?: unknown; status?: unknown }): number {
+  if (typeof res.exitCode === "number") return res.exitCode;
+  if (typeof res.code === "number") return res.code;
+  if (typeof res.status === "number") return res.status;
+  return 0;
+}
+
 function extractStderr(err: { stderr?: unknown; message?: unknown }, fallback: unknown): string {
   if (typeof err.stderr === "string") return err.stderr;
   if (err.stderr && typeof err.stderr === "object" && "toString" in err.stderr) {
@@ -37,14 +44,8 @@ export async function runOpenClaw(args: string[]): Promise<OpenClawExecResult> {
 
     const stdout = String(res.stdout ?? "");
     const stderr = String(res.stderr ?? "");
-    const exitCode =
-      typeof res.exitCode === "number"
-        ? res.exitCode
-        : typeof res.code === "number"
-          ? res.code
-          : typeof res.status === "number"
-            ? res.status
-            : 0;
+    const exitCode = resolveExitCode(res);
+
 
     if (exitCode !== 0) return { ok: false, exitCode, stdout, stderr };
     return { ok: true, exitCode: 0, stdout, stderr };
