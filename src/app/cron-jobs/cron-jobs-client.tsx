@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useToast } from "@/components/ToastProvider";
 import { DeleteCronJobModal } from "@/components/delete-modals";
+import { errorMessage } from "@/lib/errors";
+import { fetchJson } from "@/lib/fetch-json";
 
 type CronJob = {
   id: string;
@@ -57,15 +59,13 @@ export default function CronJobsClient() {
     setLoading(true);
     setMsg("");
     try {
-      const res = await fetch("/api/cron/jobs", { cache: "no-store" });
-      const json = (await res.json()) as { ok: boolean; jobs?: CronJob[]; error?: string };
-      if (!res.ok) throw new Error(json.error || "Failed to load");
+      const json = await fetchJson<{ jobs?: CronJob[] }>("/api/cron/jobs", { cache: "no-store" });
       setJobs(json.jobs ?? []);
       if ((json.jobs ?? []).length === 0) {
         setMsg("No cron jobs found.");
       }
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : String(e));
+      setMsg(errorMessage(e));
       setJobs([]);
     } finally {
       setLoading(false);
@@ -80,17 +80,15 @@ export default function CronJobsClient() {
     setLoading(true);
     setMsg("");
     try {
-      const res = await fetch("/api/cron/job", {
+      await fetchJson("/api/cron/job", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id, action }),
       });
-      const json = (await res.json()) as { ok: boolean; error?: string };
-      if (!res.ok) throw new Error(json.error || "Action failed");
       setMsg(action === "run" ? "Triggered run." : "Updated.");
       await refresh();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : String(e));
+      setMsg(errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -107,18 +105,17 @@ export default function CronJobsClient() {
     setDeleteBusy(true);
     setDeleteError(null);
     try {
-      const res = await fetch("/api/cron/delete", {
+      const json = await fetchJson<{ ok?: boolean; error?: string }>("/api/cron/delete", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: deleteId }),
       });
-      const json = (await res.json()) as { ok: boolean; error?: string };
-      if (!res.ok || !json.ok) throw new Error(json.error || "Delete failed");
+      if (!json.ok) throw new Error(json.error || "Delete failed");
       toast.push({ kind: "success", message: `Removed cron job: ${deleteLabel}` });
       setDeleteOpen(false);
       await refresh();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = errorMessage(e);
       setDeleteError(msg);
       toast.push({ kind: "error", message: msg });
     } finally {

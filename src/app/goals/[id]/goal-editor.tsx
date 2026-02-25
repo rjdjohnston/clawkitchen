@@ -3,61 +3,42 @@
 import Link from "next/link";
 import { GoalFormCard, GoalFormFields } from "@/components/GoalFormFields";
 import { errorMessage } from "@/lib/errors";
-import { type GoalFrontmatter, type GoalStatus, parseCommaList } from "@/lib/goals-client";
+import { fetchJson } from "@/lib/fetch-json";
+import { type GoalFrontmatter, type GoalStatus, useGoalFormState } from "@/lib/goals-client";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
-
-function parseGoalResponse(res: Response, data: unknown): { error?: string; goal?: GoalFrontmatter; body?: string } {
-  const obj = (data && typeof data === "object") ? (data as Record<string, unknown>) : {};
-  if (!res.ok) return { error: String(obj.error ?? "Failed to load goal") };
-
-  const g = (obj.goal ?? {}) as GoalFrontmatter;
-  return {
-    goal: g,
-    body: String(obj.body ?? ""),
-  };
-}
+import { useCallback, useEffect, useState } from "react";
 
 export default function GoalEditor({ goalId }: { goalId: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [title, setTitle] = useState("");
-  const [status, setStatus] = useState<GoalStatus>("planned");
-  const [tagsRaw, setTagsRaw] = useState("");
-  const [teamsRaw, setTeamsRaw] = useState("");
-  const [body, setBody] = useState("");
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
-  const tags = useMemo(() => parseCommaList(tagsRaw), [tagsRaw]);
-  const teams = useMemo(() => parseCommaList(teamsRaw), [teamsRaw]);
+  const { formState, tags, teams } = useGoalFormState();
+  const { setTitle, setStatus, setTagsRaw, setTeamsRaw, setBody } = formState;
 
   const loadGoal = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/goals/${encodeURIComponent(goalId)}`, { cache: "no-store" });
-      const data = (await res.json()) as unknown;
-      const parsed = parseGoalResponse(res, data);
-      if (parsed.error) {
-        setError(parsed.error);
-        return;
-      }
-      const g = parsed.goal as GoalFrontmatter;
+      const data = await fetchJson<{ goal: GoalFrontmatter; body: string }>(
+        `/api/goals/${encodeURIComponent(goalId)}`,
+        { cache: "no-store" }
+      );
+      const g = data.goal;
       setTitle(g.title ?? "");
       setStatus((g.status as GoalStatus) ?? "planned");
       setTagsRaw((g.tags ?? []).join(", "));
       setTeamsRaw((g.teams ?? []).join(", "));
-      setBody(parsed.body ?? "");
+      setBody(data.body ?? "");
       setUpdatedAt(g.updatedAt ?? null);
     } catch (e: unknown) {
       setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [goalId]);
+  }, [goalId, setTitle, setStatus, setTagsRaw, setTeamsRaw, setBody]);
 
   useEffect(() => {
     void loadGoal();
@@ -66,42 +47,45 @@ export default function GoalEditor({ goalId }: { goalId: string }) {
   async function save() {
     setSaving(true);
     setError(null);
-    const res = await fetch(`/api/goals/${encodeURIComponent(goalId)}`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title, status, tags, teams, body }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data?.error ?? "Failed to save");
+    try {
+      const data = await fetchJson<{ goal: GoalFrontmatter }>(
+        `/api/goals/${encodeURIComponent(goalId)}`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            title: formState.title,
+            status: formState.status,
+            tags,
+            teams,
+            body: formState.body,
+          }),
+        }
+      );
+      setUpdatedAt(data.goal.updatedAt ?? null);
+      router.push("/goals");
+    } catch (e: unknown) {
+      setError(errorMessage(e));
+    } finally {
       setSaving(false);
-      return;
     }
-    const g = data.goal as GoalFrontmatter;
-    setUpdatedAt(g.updatedAt ?? null);
-    setSaving(false);
-
-    // Save should behave like an editor "submit": return to the list.
-    router.push("/goals");
   }
 
   async function promoteToInbox() {
     setSaving(true);
     setError(null);
-    const res = await fetch(`/api/goals/${encodeURIComponent(goalId)}/promote`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data?.error ?? "Failed to promote");
+    try {
+      await fetchJson(`/api/goals/${encodeURIComponent(goalId)}/promote`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      await loadGoal();
+    } catch (e: unknown) {
+      setError(errorMessage(e));
+    } finally {
       setSaving(false);
-      return;
     }
-
-    await loadGoal();
-    setSaving(false);
   }
 
   async function deleteThisGoal() {
@@ -110,15 +94,14 @@ export default function GoalEditor({ goalId }: { goalId: string }) {
 
     setSaving(true);
     setError(null);
-    const res = await fetch(`/api/goals/${encodeURIComponent(goalId)}`, { method: "DELETE" });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data?.error ?? "Failed to delete");
+    try {
+      await fetchJson(`/api/goals/${encodeURIComponent(goalId)}`, { method: "DELETE" });
+      router.push("/goals");
+    } catch (e: unknown) {
+      setError(errorMessage(e));
+    } finally {
       setSaving(false);
-      return;
     }
-
-    router.push("/goals");
   }
 
   return (
@@ -165,15 +148,12 @@ export default function GoalEditor({ goalId }: { goalId: string }) {
         </div>
         }
       >
-        <GoalFormFields
-          formState={{ title, setTitle, status, setStatus, tagsRaw, setTagsRaw, teamsRaw, setTeamsRaw, body, setBody }}
-          updatedAt={updatedAt}
-        />
+        <GoalFormFields formState={formState} updatedAt={updatedAt} />
       </GoalFormCard>
 
       <div className="ck-glass p-6">
         <div className="text-sm font-medium">Preview</div>
-        <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--ck-text-primary)]">{body}</pre>
+        <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--ck-text-primary)]">{formState.body}</pre>
       </div>
 
       {loading ? <div className="text-sm text-[color:var(--ck-text-secondary)]">Loading…</div> : null}

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { slugifyId } from "@/lib/slugify";
+import { useState } from "react";
+import { useSlugifiedId } from "@/lib/use-slugified-id";
 import { CreateModalShell } from "./CreateModalShell";
 
 export function CreateTeamModal({
@@ -32,22 +32,15 @@ export function CreateTeamModal({
   const [teamName, setTeamName] = useState("");
   const [idTouched, setIdTouched] = useState(false);
 
-  const derivedId = useMemo(() => slugifyId(teamName), [teamName]);
-  const effectiveId = idTouched ? teamId : derivedId;
-
-  useEffect(() => {
-    if (!open) return;
-    if (!idTouched) setTeamId(derivedId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Sync derivedId to teamId when user hasn't touched; setTeamId stable.
-  }, [derivedId, open, idTouched]);
-
-  useEffect(() => {
-    if (!open) return;
-    setIdTouched(false);
-    setTeamName("");
-    setTeamId("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Reset form when modal closes; reset setters intentionally omitted.
-  }, [open]);
+  const { effectiveId } = useSlugifiedId({
+    open,
+    name: teamName,
+    setName: setTeamName,
+    id: teamId,
+    setId: setTeamId,
+    idTouched,
+    setIdTouched,
+  });
 
   return (
     <CreateModalShell

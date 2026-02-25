@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { errorMessage } from "@/lib/errors";
+import { fetchJson } from "@/lib/fetch-json";
 import { DeleteAgentModal } from "@/components/delete-modals";
 import { IdentityTab, ConfigTab, SkillsTab, FilesTab } from "./agent-editor-tabs";
 
@@ -131,8 +132,7 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
       setLoading(true);
       setPageMsg("");
       try {
-        const agentsRes = await fetch("/api/agents", { cache: "no-store" });
-        const agentsJson = (await agentsRes.json()) as { agents?: unknown[] };
+        const agentsJson = await fetchJson<{ agents?: unknown[] }>("/api/agents", { cache: "no-store" });
         const list = Array.isArray(agentsJson.agents) ? (agentsJson.agents as AgentListItem[]) : [];
         const found = list.find((a) => a.id === agentId) ?? null;
         setAgent(found);
@@ -150,7 +150,7 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
           setSkillsLoading,
         });
       } catch (e: unknown) {
-        setPageMsg(e instanceof Error ? e.message : String(e));
+        setPageMsg(errorMessage(e));
       } finally {
         setLoading(false);
       }
@@ -174,26 +174,22 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
 
   async function onSaveIdentity() {
     await withSaveFeedback(async () => {
-      const res = await fetch("/api/agents/identity", {
+      await fetchJson("/api/agents/identity", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ agentId, name, emoji, theme, avatar }),
       });
-      const json = (await res.json()) as { message?: string; error?: string };
-      if (!res.ok) throw new Error(json.message || json.error || "Save failed");
       return "Saved identity via openclaw agents set-identity";
     });
   }
 
   async function onSaveConfig() {
     await withSaveFeedback(async () => {
-      const res = await fetch("/api/agents/update", {
+      await fetchJson("/api/agents/update", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ agentId, patch: { model } }),
       });
-      const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error || "Save config failed");
       return "Saved agent config (model) and restarted gateway";
     });
   }
@@ -207,15 +203,14 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
     setLoadingFile(true);
     setFileError("");
     try {
-      const res = await fetch(
+      const json = await fetchJson<{ ok?: boolean; content?: string }>(
         `/api/agents/file?agentId=${encodeURIComponent(agentId)}&name=${encodeURIComponent(nextName)}`,
         { cache: "no-store" },
       );
-      const json = (await res.json()) as { ok?: boolean; error?: string; content?: string };
-      if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load file");
+      if (!json.ok) throw new Error("Failed to load file");
       setFileContent(String(json.content ?? ""));
     } catch (e: unknown) {
-      setFileError(e instanceof Error ? e.message : String(e));
+      setFileError(errorMessage(e));
     } finally {
       setLoadingFile(false);
     }
@@ -269,23 +264,26 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
     setSaving(true);
     setFileError("");
     try {
-      const res = await fetch("/api/agents/file", {
+      const json = await fetchJson<{ ok?: boolean }>("/api/agents/file", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ agentId, name: fileName, content: fileContent }),
       });
-      const json = (await res.json()) as { ok?: boolean; error?: string };
-      if (!res.ok || !json.ok) throw new Error(json.error || "Failed to save file");
+      if (!json.ok) throw new Error("Failed to save file");
 
       // Refresh the file list so missing/mtime updates immediately.
-      const r = await fetch(`/api/agents/files?agentId=${encodeURIComponent(agentId)}`, { cache: "no-store" });
-      const j = await r.json();
-      if (r.ok && j.ok && Array.isArray(j.files)) {
-        setAgentFiles(j.files);
+      try {
+        const j = await fetchJson<{ ok?: boolean; files?: Array<FileEntry & { required?: boolean; rationale?: string }> }>(
+          `/api/agents/files?agentId=${encodeURIComponent(agentId)}`,
+          { cache: "no-store" },
+        );
+        if (j.ok && Array.isArray(j.files)) setAgentFiles(j.files);
+      } catch {
+        // ignore
       }
       // No-op: saving a file doesn't need a global notice.
     } catch (e: unknown) {
-      setFileError(e instanceof Error ? e.message : String(e));
+      setFileError(errorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -304,13 +302,11 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
     setPageMsg("");
 
     try {
-      const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}`, { method: "DELETE" });
-      const json = (await res.json()) as { ok?: boolean; error?: string; message?: string; stderr?: string };
-      if (!res.ok || !json.ok) throw new Error(json.error || json.message || json.stderr || "Delete failed");
+      await fetchJson(`/api/agents/${encodeURIComponent(agentId)}`, { method: "DELETE" });
 
       window.location.href = "/";
     } catch (e: unknown) {
-      setDeleteError(e instanceof Error ? e.message : String(e));
+      setDeleteError(errorMessage(e));
       setDeleteBusy(false);
     }
   }
@@ -417,19 +413,23 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
               setSkillMsg("");
               setSkillError("");
               try {
-                const res = await fetch("/api/agents/skills/install", {
+                await fetchJson("/api/agents/skills/install", {
                   method: "POST",
                   headers: { "content-type": "application/json" },
                   body: JSON.stringify({ agentId, skill: selectedSkill }),
                 });
-                const json = await res.json();
-                if (!res.ok || !json.ok) throw new Error(json.error || "Failed to install skill");
                 setSkillMsg(`Installed skill: ${selectedSkill}`);
-                const r = await fetch(`/api/agents/skills?agentId=${encodeURIComponent(agentId)}`, { cache: "no-store" });
-                const j = await r.json();
-                if (r.ok && j.ok) setSkillsList(Array.isArray(j.skills) ? j.skills : []);
+                try {
+                  const j = await fetchJson<{ ok?: boolean; skills?: string[] }>(
+                    `/api/agents/skills?agentId=${encodeURIComponent(agentId)}`,
+                    { cache: "no-store" },
+                  );
+                  if (j.ok && Array.isArray(j.skills)) setSkillsList(j.skills);
+                } catch {
+                  // ignore
+                }
               } catch (e: unknown) {
-                setSkillError(e instanceof Error ? e.message : String(e));
+                setSkillError(errorMessage(e));
               } finally {
                 setInstallingSkill(false);
               }

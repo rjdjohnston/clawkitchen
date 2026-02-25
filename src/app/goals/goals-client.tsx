@@ -2,18 +2,18 @@
 
 import Link from "next/link";
 import { errorMessage } from "@/lib/errors";
+import { fetchJson } from "@/lib/fetch-json";
 import { type GoalFrontmatter } from "@/lib/goals-client";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 async function fetchGoals(): Promise<{ goals: GoalFrontmatter[]; error: string | null }> {
-  const res = await fetch("/api/goals", { cache: "no-store" });
-  const data = (await res.json()) as unknown;
-  const obj = (data && typeof data === "object") ? (data as Record<string, unknown>) : {};
-  if (!res.ok) {
-    return { goals: [], error: String(obj.error ?? "Failed to load goals") };
+  try {
+    const data = await fetchJson<{ goals?: GoalFrontmatter[] }>("/api/goals", { cache: "no-store" });
+    return { goals: data.goals ?? [], error: null };
+  } catch (e: unknown) {
+    return { goals: [], error: errorMessage(e) };
   }
-  return { goals: (obj.goals ?? []) as GoalFrontmatter[], error: null };
 }
 
 function Badge({ children }: { children: React.ReactNode }) {

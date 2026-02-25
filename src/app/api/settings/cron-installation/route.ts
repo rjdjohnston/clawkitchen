@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { errorMessage } from "@/lib/errors";
 import { gatewayConfigGet, gatewayConfigPatch } from "@/lib/gateway";
 
 const CFG_PATH = "plugins.entries.recipes.config.cronInstallation";
@@ -18,7 +19,7 @@ export async function GET() {
     return NextResponse.json({ ok: true, path: CFG_PATH, value });
   } catch (e: unknown) {
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      { ok: false, error: errorMessage(e) },
       { status: 500 },
     );
   }
@@ -50,7 +51,7 @@ export async function PUT(req: Request) {
     return NextResponse.json({ ok: true, path: CFG_PATH, value, note: "Gateway will restart to apply config." });
   } catch (e: unknown) {
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      { ok: false, error: errorMessage(e) },
       { status: 500 },
     );
   }

@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ScaffoldOverlay, type ScaffoldOverlayStep } from "@/components/ScaffoldOverlay";
+import { fetchJsonWithStatus } from "@/lib/fetch-json";
 import { pollUntil } from "@/lib/poll";
 import { fetchScaffold } from "@/lib/scaffold-client";
 import { useToast } from "@/components/ToastProvider";
 import { CreateTeamModal } from "./CreateTeamModal";
 import { CreateAgentModal } from "./CreateAgentModal";
 import { DeleteRecipeModal } from "@/components/delete-modals";
+import { errorMessage } from "@/lib/errors";
 
 type Recipe = {
   id: string;
@@ -177,25 +179,27 @@ export default function RecipesClient({
     setBusy(true);
     setModalError(null);
     try {
-      const res = await fetch("/api/recipes/delete", {
+      const result = await fetchJsonWithStatus<{ ok?: boolean; error?: string }>("/api/recipes/delete", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: deleteId }),
       });
-      const json = await res.json();
-      if (!res.ok || !json.ok) {
-        const msg = String(json.error || "Delete failed");
-        if (res.status === 409) {
-          setModalError(msg);
+      if (!result.ok) {
+        if (result.status === 409) {
+          setModalError(result.error);
           return;
         }
-        throw new Error(msg);
+        throw new Error(result.error);
+      }
+      if (!result.data.ok) {
+        setModalError(result.data.error ?? "Delete failed");
+        return;
       }
       toast.push({ kind: "success", message: `Deleted recipe: ${deleteId}` });
       setDeleteOpen(false);
       window.location.reload();
     } catch (e: unknown) {
-      toast.push({ kind: "error", message: e instanceof Error ? e.message : String(e) });
+      toast.push({ kind: "error", message: errorMessage(e) });
     } finally {
       setBusy(false);
     }
@@ -252,7 +256,6 @@ export default function RecipesClient({
     return null;
   }
 
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- Shared scaffold flow; splitting further would obscure control flow
   async function scaffoldWithOverlay(opts: {
     kind: "team" | "agent";
     recipeId: string;
@@ -342,7 +345,7 @@ export default function RecipesClient({
     } catch (e: unknown) {
       if (serveTimer) clearTimeout(serveTimer);
       setOverlayOpen(false);
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = errorMessage(e);
       setError(msg);
       toast.push({ kind: "error", message: msg });
     } finally {

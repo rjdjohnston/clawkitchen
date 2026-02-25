@@ -2,6 +2,9 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { DELETE } from "../agents/[id]/route";
 
 vi.mock("@/lib/openclaw", () => ({ runOpenClaw: vi.fn() }));
+vi.mock("node:fs/promises", () => ({
+  default: { mkdir: vi.fn(), rename: vi.fn(), rm: vi.fn() },
+}));
 
 import { runOpenClaw } from "@/lib/openclaw";
 
@@ -72,5 +75,30 @@ describe("api agents [id] route", () => {
     const json = await res.json();
     expect(json.ok).toBe(true);
     expect(json.result).toBe("plain text");
+  });
+
+  it("moves team role to trash when agent has workspace", async () => {
+    vi.mocked(runOpenClaw)
+      .mockResolvedValueOnce({
+        ok: true,
+        exitCode: 0,
+        stdout: JSON.stringify([
+          { id: "team1-role1", workspace: "/var/workspace/workspace-team1/roles/role1" },
+        ]),
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        exitCode: 0,
+        stdout: JSON.stringify({ deleted: true }),
+        stderr: "",
+      });
+
+    const res = await DELETE(
+      new Request("https://test", { method: "DELETE" }),
+      { params: Promise.resolve({ id: "team1-role1" }) }
+    );
+    expect(res.status).toBe(200);
+    expect(res.ok).toBe(true);
   });
 });

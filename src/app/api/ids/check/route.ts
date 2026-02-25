@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runOpenClaw } from "@/lib/openclaw";
+import { errorMessage } from "@/lib/errors";
 import { readOpenClawConfig } from "@/lib/paths";
 
 type Kind = "team" | "agent";
@@ -105,7 +106,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: true, available: true });
   } catch (e: unknown) {
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      { ok: false, error: errorMessage(e) },
       { status: 500 },
     );
   }

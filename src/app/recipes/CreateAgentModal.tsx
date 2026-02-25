@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { slugifyId } from "@/lib/slugify";
+import { fetchJson } from "@/lib/fetch-json";
+import { useSlugifiedId } from "@/lib/use-slugified-id";
 import { CreateModalShell } from "./CreateModalShell";
 
 function getAvailabilityBorderClass(state: string): string {
@@ -21,6 +22,18 @@ type Availability =
   | { state: "checking" }
   | { state: "available" }
   | { state: "taken"; reason?: string };
+
+/** Sync availability from local arrays (no fetch). Returns null when API check needed. */
+function syncAvailability(
+  v: string,
+  existingRecipeIds: string[],
+  existingAgentIds: string[]
+): Availability | null {
+  if (!v) return { state: "empty" };
+  if (existingRecipeIds.includes(v)) return { state: "taken", reason: "recipe-id-collision" };
+  if (existingAgentIds.includes(v)) return { state: "taken", reason: "agent-exists" };
+  return null;
+}
 
 export function CreateAgentModal({
   open,
@@ -52,58 +65,45 @@ export function CreateAgentModal({
   onConfirm: () => void;
 }) {
   const [idTouched, setIdTouched] = useState(false);
-  const [availability, setAvailability] = useState<Availability>({ state: "empty" });
+  const [apiAvailability, setApiAvailability] = useState<Availability | null>(null);
 
-  const derivedId = useMemo(() => slugifyId(agentName), [agentName]);
-  const effectiveId = idTouched ? agentId : derivedId;
+  const { effectiveId } = useSlugifiedId({
+    open,
+    name: agentName,
+    setName: setAgentName,
+    id: agentId,
+    setId: setAgentId,
+    idTouched,
+    setIdTouched,
+  });
+
+  const v = String(effectiveId ?? "").trim();
+  const syncAvail = useMemo(
+    () => (open ? syncAvailability(v, existingRecipeIds, existingAgentIds) : { state: "empty" as const }),
+    [open, v, existingRecipeIds, existingAgentIds]
+  );
+
+  const availability: Availability = syncAvail ?? apiAvailability ?? { state: "available" };
 
   useEffect(() => {
-    if (!open) return;
-    if (!idTouched) setAgentId(derivedId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Sync derivedId to agentId when user hasn't touched; setAgentId stable.
-  }, [derivedId, open, idTouched]);
-
-  useEffect(() => {
-    if (!open) return;
-    setIdTouched(false);
-    setAgentName("");
-    setAgentId("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Reset form when modal closes; reset setters intentionally omitted.
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const v = String(effectiveId ?? "").trim();
-    if (!v) {
-      setAvailability({ state: "empty" });
-      return;
-    }
-    if (existingRecipeIds.includes(v)) {
-      setAvailability({ state: "taken", reason: "recipe-id-collision" });
-      return;
-    }
-    if (existingAgentIds.includes(v)) {
-      setAvailability({ state: "taken", reason: "agent-exists" });
-      return;
-    }
-    setAvailability({ state: "available" });
-
+    if (!open || syncAvail !== null) return;
     const t = setTimeout(() => {
       void (async () => {
-        setAvailability({ state: "checking" });
+        setApiAvailability({ state: "checking" });
         try {
-          const res = await fetch(`/api/ids/check?kind=agent&id=${encodeURIComponent(v)}`, { cache: "no-store" });
-          const json = (await res.json()) as { ok?: boolean; available?: boolean; reason?: string };
-          if (!res.ok || !json.ok) throw new Error(String((json as { error?: unknown }).error ?? "Failed to check id"));
-          if (json.available) setAvailability({ state: "available" });
-          else setAvailability({ state: "taken", reason: json.reason });
+          const json = await fetchJson<{ ok?: boolean; available?: boolean; reason?: string }>(
+            `/api/ids/check?kind=agent&id=${encodeURIComponent(v)}`,
+            { cache: "no-store" }
+          );
+          if (json.available) setApiAvailability({ state: "available" });
+          else setApiAvailability({ state: "taken", reason: json.reason });
         } catch {
-          setAvailability({ state: "available" });
+          setApiAvailability({ state: "available" });
         }
       })();
     }, 250);
     return () => clearTimeout(t);
-  }, [effectiveId, open, existingRecipeIds, existingAgentIds]);
+  }, [open, syncAvail, v]);
 
   return (
     <CreateModalShell

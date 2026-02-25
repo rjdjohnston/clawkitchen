@@ -3,6 +3,7 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import { parseTeamRoleWorkspace } from "@/lib/agent-workspace";
 import { getAgentContextFromQuery } from "@/lib/api-route-helpers";
+import { errorMessage } from "@/lib/errors";
 
 export async function GET(req: Request) {
   const ctx = await getAgentContextFromQuery(req);
@@ -23,7 +24,7 @@ export async function GET(req: Request) {
       const entries = await fs.readdir(skillsDir, { withFileTypes: true });
       for (const e of entries) if (e.isDirectory()) skills.add(e.name);
     } catch (e: unknown) {
-      notes.push(`${skillsDir}: ${e instanceof Error ? e.message : String(e)}`);
+      notes.push(`${skillsDir}: ${errorMessage(e)}`);
     }
   }
 

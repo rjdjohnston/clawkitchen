@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { slugifyFilePart, ensureWorkflowInstructions } from "@/lib/goal-promote";
 import { goalErrorResponse, readGoal, writeGoal } from "@/lib/goals";
 import { getTeamWorkspaceDir, readOpenClawConfig } from "@/lib/paths";
+import { errorMessage } from "@/lib/errors";
 import { runOpenClaw } from "@/lib/openclaw";
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -100,7 +101,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         if (!res.ok) throw new Error(res.stderr || `openclaw exit ${res.exitCode}`);
         pingOk = true;
       } catch (e: unknown) {
-        pingReason = e instanceof Error ? e.message : String(e);
+        pingReason = errorMessage(e);
       }
     }
 

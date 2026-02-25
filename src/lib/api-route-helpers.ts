@@ -69,6 +69,16 @@ export type AgentContext = { agentId: string; ws: string };
 export async function getAgentContextFromQuery(req: Request): Promise<AgentContext | NextResponse> {
   const { searchParams } = new URL(req.url);
   const agentId = String(searchParams.get("agentId") ?? "").trim();
+  return resolveAgentContext(agentId);
+}
+
+/** Resolves agentId and workspace from parsed body. Caller must parse req.json() first. */
+export async function getAgentContextFromBody(body: { agentId?: string }): Promise<AgentContext | NextResponse> {
+  const agentId = String(body.agentId ?? "").trim();
+  return resolveAgentContext(agentId);
+}
+
+async function resolveAgentContext(agentId: string): Promise<AgentContext | NextResponse> {
   if (!agentId) return NextResponse.json({ ok: false, error: "agentId is required" }, { status: 400 });
   try {
     const ws = await resolveAgentWorkspace(agentId);

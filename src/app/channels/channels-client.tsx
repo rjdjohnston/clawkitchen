@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
+import { fetchJson } from "@/lib/fetch-json";
 import { isRecord } from "@/lib/type-guards";
 
 type ChannelConfig = Record<string, unknown>;
@@ -44,13 +45,13 @@ export default function ChannelsClient() {
   const [saving, setSaving] = useState(false);
 
   async function fetchBindings(): Promise<{ ok: true; channels: Record<string, unknown> } | { ok: false; error: string }> {
-    const res = await fetch("/api/channels/bindings", { cache: "no-store" });
-    const data = (await res.json()) as ChannelsResponse;
-    if (!res.ok || !data?.ok) {
-      return { ok: false, error: String(data?.error ?? `Failed to load channels (${res.status})`) };
+    try {
+      const data = await fetchJson<ChannelsResponse>("/api/channels/bindings", { cache: "no-store" });
+      const ch = isRecord(data.channels) ? data.channels : {};
+      return { ok: true, channels: ch };
+    } catch (e: unknown) {
+      return { ok: false, error: errorMessage(e) };
     }
-    const ch = isRecord(data.channels) ? data.channels : {};
-    return { ok: true, channels: ch };
   }
 
   const refresh = useCallback(async () => {
@@ -97,6 +98,23 @@ export default function ChannelsClient() {
     setConfigJson(JSON.stringify(cfg ?? {}, null, 2) + "\n");
   }
 
+  async function mutate(
+    method: "PUT" | "DELETE",
+    body: { provider: string; config?: Record<string, unknown> }
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    try {
+      const data = await fetchJson<ChannelsResponse>("/api/channels/bindings", {
+        method,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!data?.ok) return { ok: false, error: String(data?.error ?? `Failed to ${method === "PUT" ? "save" : "delete"}`) };
+      return { ok: true };
+    } catch (e: unknown) {
+      return { ok: false, error: errorMessage(e) };
+    }
+  }
+
   async function upsert() {
     setSaving(true);
     setError(null);
@@ -115,41 +133,28 @@ export default function ChannelsClient() {
       return;
     }
 
-    const res = await fetch("/api/channels/bindings", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ provider: provider.trim(), config: parsed }),
-    });
-    const data = (await res.json()) as ChannelsResponse;
-    if (!res.ok || !data?.ok) {
-      setError(String(data?.error ?? "Failed to save"));
+    const result = await mutate("PUT", { provider: provider.trim(), config: parsed });
+    if (!result.ok) {
+      setError(result.error);
       setSaving(false);
       return;
     }
-
     await refresh();
     setSaving(false);
   }
 
   async function remove(p: string) {
-    const ok = window.confirm(`Delete channel binding "${p}"?`);
-    if (!ok) return;
+    if (!window.confirm(`Delete channel binding "${p}"?`)) return;
 
     setSaving(true);
     setError(null);
 
-    const res = await fetch("/api/channels/bindings", {
-      method: "DELETE",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ provider: p }),
-    });
-    const data = (await res.json()) as ChannelsResponse;
-    if (!res.ok || !data?.ok) {
-      setError(String(data?.error ?? "Failed to delete"));
+    const result = await mutate("DELETE", { provider: p });
+    if (!result.ok) {
+      setError(result.error);
       setSaving(false);
       return;
     }
-
     await refresh();
     setSaving(false);
   }

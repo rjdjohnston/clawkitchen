@@ -1,26 +1,23 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { getTeamContextFromQuery, listWorkspaceFiles } from "@/lib/api-route-helpers";
+import { listWorkspaceFiles, withTeamContextFromQuery } from "@/lib/api-route-helpers";
 
 export async function GET(req: Request) {
-  const ctx = await getTeamContextFromQuery(req);
-  if (ctx instanceof Response) return ctx;
-  const { teamId, teamDir } = ctx;
-
-  // QA checklist should only be required when:
+  return withTeamContextFromQuery(req, async ({ teamId, teamDir }) => {
+    // QA checklist should only be required when:
   // - the team has a test role, and/or
   // - the recipe opts in via frontmatter (qaChecklist: true)
-  const hasTestRole = await (async () => {
+    const hasTestRole = await (async () => {
     try {
       const st = await fs.stat(path.join(teamDir, "roles", "test"));
       return st.isDirectory();
     } catch {
       return false;
     }
-  })();
+    })();
 
-  const recipeOptsIn = await (async () => {
+    const recipeOptsIn = await (async () => {
     try {
       const teamJsonPath = path.join(teamDir, "team.json");
       const raw = await fs.readFile(teamJsonPath, "utf8");
@@ -43,11 +40,11 @@ export async function GET(req: Request) {
     } catch {
       return false;
     }
-  })();
+    })();
 
-  const qaChecklistRequired = hasTestRole || recipeOptsIn;
+    const qaChecklistRequired = hasTestRole || recipeOptsIn;
 
-  const candidates: Array<{ name: string; required: boolean; rationale: string }> = [
+    const candidates: Array<{ name: string; required: boolean; rationale: string }> = [
     { name: "TEAM.md", required: true, rationale: "Team workspace overview" },
     { name: "TICKETS.md", required: true, rationale: "Ticket workflow + format" },
     { name: "notes/QA_CHECKLIST.md", required: qaChecklistRequired, rationale: "QA verification checklist" },
@@ -57,9 +54,10 @@ export async function GET(req: Request) {
     { name: "AGENTS.md", required: false, rationale: "Optional team notes (often role-scoped)" },
     { name: "TOOLS.md", required: false, rationale: "Optional team-local tooling notes" },
     { name: "MEMORY.md", required: false, rationale: "Optional curated memory" },
-  ];
+    ];
 
-  const files = await listWorkspaceFiles(teamDir, candidates);
+    const files = await listWorkspaceFiles(teamDir, candidates);
 
-  return NextResponse.json({ ok: true, teamId, teamDir, files });
+    return NextResponse.json({ ok: true, teamId, teamDir, files });
+  });
 }
