@@ -661,7 +661,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   if (loading) return <div className="ck-glass mx-auto max-w-4xl p-6">Loading…</div>;
 
   return (
-    <div className="ck-glass mx-auto max-w-6xl p-6 sm:p-8">
+    <div className="ck-glass p-6 sm:p-8">
       <h1 className="text-2xl font-semibold tracking-tight">Team editor</h1>
       <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
         Bootstrap a <strong>custom team recipe</strong> for this installed team, without modifying builtin recipes.

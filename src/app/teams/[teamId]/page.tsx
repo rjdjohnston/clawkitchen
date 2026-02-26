@@ -33,8 +33,8 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
   const name = await getTeamDisplayName(teamId);
 
   return (
-    <main className="min-h-screen p-8">
-      <div className="mx-auto mb-4 flex max-w-6xl items-start justify-between gap-4">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <Link
             href="/"
@@ -56,7 +56,7 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
         </div>
       </div>
 
-      <div className="mx-auto mb-4 flex max-w-6xl items-center justify-end">
+      <div className="flex items-center justify-end">
         <Link
           href={`/goals?team=${encodeURIComponent(teamId)}`}
           className="text-sm font-medium text-[color:var(--ck-text-secondary)] hover:underline"
@@ -66,6 +66,6 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
       </div>
 
       <TeamEditor teamId={teamId} />
-    </main>
+    </div>
   );
 }
