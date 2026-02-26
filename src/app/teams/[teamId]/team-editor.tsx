@@ -148,6 +148,12 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [workflowSelectedNodeId, setWorkflowSelectedNodeId] = useState<string>("");
   const [workflowDragging, setWorkflowDragging] = useState<null | { nodeId: string; dx: number; dy: number; containerLeft: number; containerTop: number }>(null);
 
+  const [workflowRuns, setWorkflowRuns] = useState<string[]>([]);
+  const [workflowRunsLoading, setWorkflowRunsLoading] = useState(false);
+  const [workflowRunsError, setWorkflowRunsError] = useState<string>("");
+  const [selectedWorkflowRunId, setSelectedWorkflowRunId] = useState<string>("");
+  const [selectedWorkflowRun, setSelectedWorkflowRun] = useState<unknown | null>(null);
+
   const [teamAgents, setTeamAgents] = useState<Array<{ id: string; identityName?: string }>>([]);
   const [teamAgentsLoading, setTeamAgentsLoading] = useState(false);
 
@@ -173,6 +179,48 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
       return e instanceof Error ? e.message : "Invalid JSON";
     }
   }, [workflowJsonText]);
+
+  useEffect(() => {
+    const wfId = String(workflowParsed?.id ?? "").trim();
+    if (!wfId) {
+      setWorkflowRuns([]);
+      setSelectedWorkflowRunId("");
+      setSelectedWorkflowRun(null);
+      setWorkflowRunsError("");
+      return;
+    }
+
+    let canceled = false;
+    (async () => {
+      setWorkflowRunsLoading(true);
+      setWorkflowRunsError("");
+      try {
+        const res = await fetch(
+          `/api/teams/workflow-runs?teamId=${encodeURIComponent(teamId)}&workflowId=${encodeURIComponent(wfId)}`,
+          { cache: "no-store" }
+        );
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || "Failed to list runs");
+        const files = Array.isArray(json.files) ? json.files : [];
+        const list = files.map((f: unknown) => String(f ?? "").trim()).filter((f: string) => Boolean(f));
+        if (canceled) return;
+        setWorkflowRuns(list);
+        if (selectedWorkflowRunId && !list.some((f: string) => f === `${selectedWorkflowRunId}.run.json`)) {
+          setSelectedWorkflowRunId("");
+          setSelectedWorkflowRun(null);
+        }
+      } catch (e: unknown) {
+        if (canceled) return;
+        setWorkflowRunsError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!canceled) setWorkflowRunsLoading(false);
+      }
+    })();
+
+    return () => {
+      canceled = true;
+    };
+  }, [teamId, workflowParsed?.id, selectedWorkflowRunId]);
 
   useEffect(() => {
     if (!workflowDragging) return;
@@ -1609,6 +1657,104 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                                 <div className="text-xs text-[color:var(--ck-text-secondary)]">No triggers yet.</div>
                               )}
                             </div>
+                          </div>
+
+                          <div className="border-t border-white/10 pt-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Runs (history)</div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={workflowSaving}
+                                  onClick={async () => {
+                                    const wfId = String(wf.id ?? "").trim();
+                                    if (!wfId) return;
+                                    setWorkflowRunsError("");
+                                    try {
+                                      const res = await fetch("/api/teams/workflow-runs", {
+                                        method: "POST",
+                                        headers: { "content-type": "application/json" },
+                                        body: JSON.stringify({ teamId, workflowId: wfId, mode: "sample" }),
+                                      });
+                                      const json = await res.json();
+                                      if (!res.ok || !json.ok) throw new Error(json.error || "Failed to create sample run");
+
+                                      const listRes = await fetch(
+                                        `/api/teams/workflow-runs?teamId=${encodeURIComponent(teamId)}&workflowId=${encodeURIComponent(wfId)}`,
+                                        { cache: "no-store" }
+                                      );
+                                      const listJson = await listRes.json();
+                                      if (!listRes.ok || !listJson.ok) throw new Error(listJson.error || "Failed to refresh runs");
+                                      const files = Array.isArray(listJson.files) ? listJson.files : [];
+                                      const list = files.map((f: unknown) => String(f ?? "").trim()).filter((f: string) => Boolean(f));
+                                      setWorkflowRuns(list);
+                                      flashMessage("Created sample run", "success");
+                                    } catch (e: unknown) {
+                                      setWorkflowRunsError(e instanceof Error ? e.message : String(e));
+                                    }
+                                  }}
+                                  className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10 disabled:opacity-50"
+                                >
+                                  + Sample run
+                                </button>
+                              </div>
+                            </div>
+
+                            {workflowRunsError ? (
+                              <div className="mt-2 rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 p-2 text-xs text-red-100">
+                                {workflowRunsError}
+                              </div>
+                            ) : null}
+
+                            <div className="mt-2 space-y-1">
+                              {workflowRunsLoading ? (
+                                <div className="text-xs text-[color:var(--ck-text-secondary)]">Loading runs…</div>
+                              ) : workflowRuns.length ? (
+                                workflowRuns.slice(0, 8).map((f) => {
+                                  const runId = String(f).replace(/\.run\.json$/i, "");
+                                  const selected = selectedWorkflowRunId === runId;
+                                  return (
+                                    <button
+                                      key={f}
+                                      type="button"
+                                      onClick={async () => {
+                                        const wfId = String(wf.id ?? "").trim();
+                                        if (!wfId) return;
+                                        setSelectedWorkflowRunId(runId);
+                                        setSelectedWorkflowRun(null);
+                                        setWorkflowRunsError("");
+                                        try {
+                                          const res = await fetch(
+                                            `/api/teams/workflow-runs?teamId=${encodeURIComponent(teamId)}&workflowId=${encodeURIComponent(wfId)}&runId=${encodeURIComponent(runId)}`,
+                                            { cache: "no-store" }
+                                          );
+                                          const json = await res.json();
+                                          if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load run");
+                                          setSelectedWorkflowRun(json.run);
+                                        } catch (e: unknown) {
+                                          setWorkflowRunsError(e instanceof Error ? e.message : String(e));
+                                        }
+                                      }}
+                                      className={
+                                        selected
+                                          ? "w-full rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-left text-[11px] text-[color:var(--ck-text-primary)]"
+                                          : "w-full rounded-[var(--ck-radius-sm)] px-2 py-1 text-left text-[11px] text-[color:var(--ck-text-secondary)] hover:bg-white/5"
+                                      }
+                                    >
+                                      {runId}
+                                    </button>
+                                  );
+                                })
+                              ) : (
+                                <div className="text-xs text-[color:var(--ck-text-secondary)]">No runs yet.</div>
+                              )}
+                            </div>
+
+                            {selectedWorkflowRun ? (
+                              <pre className="mt-2 max-h-[220px] overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2 text-[10px] text-[color:var(--ck-text-secondary)]">
+                                {JSON.stringify(selectedWorkflowRun, null, 2)}
+                              </pre>
+                            ) : null}
                           </div>
 
                           <div className="border-t border-white/10 pt-3">
