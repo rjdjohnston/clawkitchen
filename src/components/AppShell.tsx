@@ -1,22 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ToastProvider } from "@/components/ToastProvider";
 
 function NavLink({ href, label }: { href: string; label: string }) {
-  const pathname = usePathname();
-  const active = pathname === href || (href !== "/" && pathname.startsWith(href));
-
   return (
     <Link
       href={href}
       className={
-        "rounded-[var(--ck-radius-sm)] px-3 py-1.5 text-sm font-medium transition-colors " +
-        (active
-          ? "bg-[var(--ck-accent-red)] text-white"
-          : "text-[color:var(--ck-text-secondary)] hover:bg-[color:var(--ck-bg-glass)] hover:text-[color:var(--ck-text-primary)]")
+        "rounded-[var(--ck-radius-sm)] px-3 py-1.5 text-sm font-medium transition-colors text-[color:var(--ck-text-secondary)] hover:bg-[color:var(--ck-bg-glass)] hover:text-[color:var(--ck-text-primary)]"
       }
     >
       {label}

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "NODE_ENV=production next build",
     "postbuild": "node scripts/copy-standalone-static.mjs",
     "start": "next start",
     "lint": "eslint",
