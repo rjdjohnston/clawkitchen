@@ -159,6 +159,10 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
   const [workflowEditorOpen, setWorkflowEditorOpen] = useState(false);
 
+  const [workflowCreateOpen, setWorkflowCreateOpen] = useState(false);
+  const [workflowCreateId, setWorkflowCreateId] = useState("new-workflow");
+  const [workflowCreateName, setWorkflowCreateName] = useState("New workflow");
+
   const [workflowRuns, setWorkflowRuns] = useState<string[]>([]);
   const [workflowRunsLoading, setWorkflowRunsLoading] = useState(false);
   const [workflowRunsError, setWorkflowRunsError] = useState<string>("");
@@ -1192,43 +1196,24 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
               <button
                 disabled={workflowSaving}
                 onClick={() => {
-                  const id = prompt("Workflow id (lowercase letters, numbers, dashes)", "new-workflow") || "";
-                  const safeId = String(id).trim();
-                  if (!safeId) return;
-                  const name = prompt("Workflow name", "New workflow") || "";
-
-                  const workflow: WorkflowFileV1 = {
-                    schema: "clawkitchen.workflow.v1",
-                    id: safeId,
-                    name: String(name || safeId),
-                    version: 1,
-                    timezone: "America/New_York",
-                    triggers: [],
-                    nodes: [
-                      { id: "start", type: "start", name: "Start", x: 120, y: 120 },
-                      { id: "end", type: "end", name: "End", x: 420, y: 120 },
-                    ],
-                    edges: [{ id: "e1", from: "start", to: "end" }],
-                    meta: {},
-                  };
-
-                  setSelectedWorkflowFile(`${safeId}.workflow.json`);
-                  setWorkflowJsonText(JSON.stringify(workflow, null, 2) + "\n");
-                  setWorkflowEditorOpen(true);
+                  setWorkflowCreateId("new-workflow");
+                  setWorkflowCreateName("New workflow");
+                  setWorkflowCreateOpen(true);
                 }}
                 className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
               >
                 Add workflow
               </button>
 
-              <button
-                disabled={workflowSaving}
-                onClick={async () => {
-                  setWorkflowSaving(true);
-                  setWorkflowFilesError("");
-                  try {
-                    // Create the MVP built-in template (Marketing Cadence v1).
-                    const workflow: WorkflowFileV1 = {
+              {workflowFiles.length === 0 ? (
+                <button
+                  disabled={workflowSaving}
+                  onClick={async () => {
+                    setWorkflowSaving(true);
+                    setWorkflowFilesError("");
+                    try {
+                      // Create the MVP built-in template (Marketing Cadence v1) for THIS TEAM.
+                      const workflow: WorkflowFileV1 = {
                       schema: "clawkitchen.workflow.v1",
                       id: "marketing-cadence",
                       name: "Marketing Cadence (v1)",
@@ -1301,6 +1286,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
               >
                 {workflowSaving ? "Working…" : "Create Marketing Cadence template"}
               </button>
+              ) : null}
 
               <button
                 disabled={workflowSaving}
@@ -1326,6 +1312,81 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                 Refresh
               </button>
             </div>
+
+            {workflowCreateOpen ? (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+                <div className="ck-glass-strong w-full max-w-lg rounded-[var(--ck-radius-lg)] border border-white/10 p-4 shadow-[var(--ck-shadow-2)]">
+                  <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Create workflow</div>
+                  <div className="mt-1 text-xs text-[color:var(--ck-text-tertiary)]">Creates a new file under shared-context/workflows/ for this team.</div>
+
+                  <div className="mt-4 grid grid-cols-1 gap-3">
+                    <label className="grid gap-1">
+                      <span className="text-xs text-[color:var(--ck-text-secondary)]">Workflow id</span>
+                      <input
+                        value={workflowCreateId}
+                        onChange={(e) => setWorkflowCreateId(e.target.value)}
+                        className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
+                        placeholder="e.g. marketing-cadence"
+                      />
+                      <span className="text-xs text-[color:var(--ck-text-tertiary)]">lowercase letters, numbers, dashes</span>
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-xs text-[color:var(--ck-text-secondary)]">Name</span>
+                      <input
+                        value={workflowCreateName}
+                        onChange={(e) => setWorkflowCreateName(e.target.value)}
+                        className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
+                        placeholder="New workflow"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setWorkflowCreateOpen(false)}
+                      className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const safeId = String(workflowCreateId || "").trim();
+                        if (!safeId) {
+                          flashMessage("Workflow id is required", "error");
+                          return;
+                        }
+
+                        const workflow: WorkflowFileV1 = {
+                          schema: "clawkitchen.workflow.v1",
+                          id: safeId,
+                          name: String(workflowCreateName || safeId),
+                          version: 1,
+                          timezone: "America/New_York",
+                          triggers: [],
+                          nodes: [
+                            { id: "start", type: "start", name: "Start", x: 120, y: 120 },
+                            { id: "end", type: "end", name: "End", x: 420, y: 120 },
+                          ],
+                          edges: [{ id: "e1", from: "start", to: "end" }],
+                          meta: {},
+                        };
+
+                        setSelectedWorkflowFile(`${safeId}.workflow.json`);
+                        setWorkflowJsonText(JSON.stringify(workflow, null, 2) + "\n");
+                        setWorkflowCreateOpen(false);
+                        setWorkflowEditorOpen(true);
+                      }}
+                      className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)]"
+                    >
+                      Create
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-4 text-xs font-medium text-[color:var(--ck-text-secondary)]">Files</div>
             <ul className="mt-2 space-y-1">
@@ -1432,8 +1493,8 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
           </div>
 
           {workflowEditorOpen ? (
-            <div className="fixed inset-0 z-50 bg-black/70 p-4">
-              <div className="ck-glass-strong mx-auto h-[calc(100vh-2rem)] max-w-[1200px] overflow-hidden rounded-[var(--ck-radius-lg)] border border-white/10 shadow-[var(--ck-shadow-2)]">
+            <div className="fixed inset-0 z-50 bg-black/70">
+              <div className="ck-glass-strong h-full w-full overflow-hidden border border-white/10 shadow-[var(--ck-shadow-2)]">
                 <div className="flex items-center justify-between border-b border-white/10 bg-black/20 p-3">
                   <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">
                     Workflow editor{selectedWorkflowFile ? ` — ${selectedWorkflowFile}` : ""}
