@@ -1195,6 +1195,18 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                   const id = prompt("Workflow id (lowercase letters, numbers, dashes)", "new-workflow") || "";
                   const safeId = String(id).trim();
                   if (!safeId) return;
+
+                  const valid = /^[a-z0-9-]+$/.test(safeId);
+                  if (!valid) {
+                    flashMessage("Invalid workflow id. Use lowercase letters, numbers, and dashes only.", "error");
+                    return;
+                  }
+
+                  if (workflowFiles.includes(`${safeId}.workflow.json`)) {
+                    flashMessage(`Workflow already exists: ${safeId}`, "error");
+                    return;
+                  }
+
                   const name = prompt("Workflow name", "New workflow") || "";
 
                   const workflow: WorkflowFileV1 = {
