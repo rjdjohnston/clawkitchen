@@ -1601,6 +1601,8 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                                   const enabled = Boolean((t as { enabled?: unknown }).enabled);
                                   const expr = String((t as { expr?: unknown }).expr ?? "");
                                   const trigTz = String((t as { tz?: unknown }).tz ?? tz);
+                                  const cronFields = expr.trim().split(/\s+/).filter(Boolean);
+                                  const cronLooksValid = !expr.trim() || cronFields.length === 5;
 
                                   return (
                                     <div key={`${id}-${i}`} className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
@@ -1674,9 +1676,18 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                                               };
                                               setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
                                             }}
-                                            className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 font-mono text-[11px] text-[color:var(--ck-text-primary)]"
+                                            className={
+                                              cronLooksValid
+                                                ? "mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 font-mono text-[11px] text-[color:var(--ck-text-primary)]"
+                                                : "mt-1 w-full rounded-[var(--ck-radius-sm)] border border-red-400/50 bg-black/25 px-2 py-1 font-mono text-[11px] text-[color:var(--ck-text-primary)]"
+                                            }
                                             placeholder="0 9 * * 1,3,5"
                                           />
+                                          {!cronLooksValid ? (
+                                            <div className="mt-1 text-[10px] text-red-200">
+                                              Cron should be 5 fields (min hour dom month dow). You entered {cronFields.length}.
+                                            </div>
+                                          ) : null}
                                           <div className="mt-1 grid grid-cols-1 gap-1">
                                             <select
                                               value={presets.some((p) => p.expr === expr) ? expr : ""}
