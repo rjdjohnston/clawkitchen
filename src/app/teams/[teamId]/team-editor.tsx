@@ -1420,111 +1420,309 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                 </div>
 
                 <div className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3 lg:col-span-1">
-                  <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Inspector</div>
-                  {workflowParsed && workflowSelectedNodeId ? (
+                  <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Workflow</div>
+
+                  {workflowParsed ? (
                     (() => {
                       const wf = workflowParsed;
-                      const node = wf.nodes.find((n) => n.id === workflowSelectedNodeId);
-                      if (!node) {
-                        return <div className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">No node selected.</div>;
-                      }
+                      const tz = String(wf.timezone ?? "").trim() || "UTC";
+                      const triggers = wf.triggers ?? [];
+
+                      const presets = [
+                        { label: "(no preset)", expr: "" },
+                        { label: "Mon/Wed/Fri 09:00 local", expr: "0 9 * * 1,3,5" },
+                        { label: "Daily 08:00 local", expr: "0 8 * * *" },
+                        { label: "Mon 09:30 local", expr: "30 9 * * 1" },
+                      ];
 
                       return (
-                        <div className="mt-3 space-y-3">
-                          <div>
-                            <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">id</div>
-                            <div className="mt-1 rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]">
-                              {node.id}
-                            </div>
-                          </div>
-
+                        <div className="mt-2 space-y-4">
                           <label className="block">
-                            <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">name</div>
+                            <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">timezone</div>
                             <input
-                              value={String(node.name ?? "")}
+                              value={tz}
                               onChange={(e) => {
-                                const nextName = e.target.value;
-                                const next: WorkflowFileV1 = {
-                                  ...wf,
-                                  nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, name: nextName } : n)),
-                                };
+                                const nextTz = String(e.target.value || "").trim() || "UTC";
+                                const next: WorkflowFileV1 = { ...wf, timezone: nextTz };
                                 setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
                               }}
                               className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
-                              placeholder="Optional"
+                              placeholder="America/New_York"
                             />
                           </label>
 
-                          <label className="block">
-                            <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">type</div>
-                            <select
-                              value={node.type}
-                              onChange={(e) => {
-                                const nextType = e.target.value as WorkflowFileV1["nodes"][number]["type"];
-                                const next: WorkflowFileV1 = {
-                                  ...wf,
-                                  nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, type: nextType } : n)),
-                                };
-                                setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
-                              }}
-                              className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
-                            >
-                              <option value="start">start</option>
-                              <option value="end">end</option>
-                              <option value="llm">llm</option>
-                              <option value="tool">tool</option>
-                              <option value="condition">condition</option>
-                              <option value="delay">delay</option>
-                              <option value="human_approval">human_approval</option>
-                            </select>
-                          </label>
+                          <div>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">triggers</div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const id = `t${Date.now()}`;
+                                  const next: WorkflowFileV1 = {
+                                    ...wf,
+                                    triggers: [
+                                      ...triggers,
+                                      { kind: "cron", id, name: "New trigger", enabled: true, expr: "0 9 * * 1-5", tz },
+                                    ],
+                                  };
+                                  setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                }}
+                                className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+                              >
+                                + Add
+                              </button>
+                            </div>
 
-                          <div className="grid grid-cols-2 gap-2">
-                            <label className="block">
-                              <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">x</div>
-                              <input
-                                type="number"
-                                value={typeof node.x === "number" ? node.x : 0}
-                                onChange={(e) => {
-                                  const nextX = Number(e.target.value);
-                                  const next: WorkflowFileV1 = {
-                                    ...wf,
-                                    nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, x: nextX } : n)),
-                                  };
-                                  setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
-                                }}
-                                className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
-                              />
-                            </label>
-                            <label className="block">
-                              <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">y</div>
-                              <input
-                                type="number"
-                                value={typeof node.y === "number" ? node.y : 0}
-                                onChange={(e) => {
-                                  const nextY = Number(e.target.value);
-                                  const next: WorkflowFileV1 = {
-                                    ...wf,
-                                    nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, y: nextY } : n)),
-                                  };
-                                  setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
-                                }}
-                                className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
-                              />
-                            </label>
+                            <div className="mt-2 space-y-2">
+                              {triggers.length ? (
+                                triggers.map((t, i) => {
+                                  const kind = (t as { kind?: unknown }).kind;
+                                  const isCron = kind === "cron";
+                                  const id = String((t as { id?: unknown }).id ?? "");
+                                  const name = String((t as { name?: unknown }).name ?? "");
+                                  const enabled = Boolean((t as { enabled?: unknown }).enabled);
+                                  const expr = String((t as { expr?: unknown }).expr ?? "");
+                                  const trigTz = String((t as { tz?: unknown }).tz ?? tz);
+
+                                  return (
+                                    <div key={`${id}-${i}`} className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="text-xs text-[color:var(--ck-text-primary)]">{name || id || `trigger-${i + 1}`}</div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const next: WorkflowFileV1 = { ...wf, triggers: triggers.filter((_, idx) => idx !== i) };
+                                            setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                          }}
+                                          className="text-[10px] text-[color:var(--ck-text-tertiary)] hover:text-[color:var(--ck-text-primary)]"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+
+                                      {!isCron ? (
+                                        <div className="mt-1 text-xs text-[color:var(--ck-text-secondary)]">Unsupported trigger kind: {String(kind)}</div>
+                                      ) : null}
+
+                                      <div className="mt-2 grid grid-cols-1 gap-2">
+                                        <label className="flex items-center gap-2 text-xs text-[color:var(--ck-text-secondary)]">
+                                          <input
+                                            type="checkbox"
+                                            checked={enabled}
+                                            onChange={(e) => {
+                                              const nextEnabled = e.target.checked;
+                                              const next: WorkflowFileV1 = {
+                                                ...wf,
+                                                triggers: triggers.map((x, idx) =>
+                                                  idx === i ? (x.kind === "cron" ? { ...x, enabled: nextEnabled } : x) : x
+                                                ),
+                                              };
+                                              setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                            }}
+                                          />
+                                          Enabled
+                                        </label>
+
+                                        <label className="block">
+                                          <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">name</div>
+                                          <input
+                                            value={name}
+                                            onChange={(e) => {
+                                              const nextName = e.target.value;
+                                              const next: WorkflowFileV1 = {
+                                                ...wf,
+                                                triggers: triggers.map((x, idx) =>
+                                                  idx === i ? (x.kind === "cron" ? { ...x, name: nextName } : x) : x
+                                                ),
+                                              };
+                                              setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                            }}
+                                            className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                            placeholder="Content cadence"
+                                          />
+                                        </label>
+
+                                        <label className="block">
+                                          <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">schedule (cron)</div>
+                                          <input
+                                            value={expr}
+                                            onChange={(e) => {
+                                              const nextExpr = e.target.value;
+                                              const next: WorkflowFileV1 = {
+                                                ...wf,
+                                                triggers: triggers.map((x, idx) =>
+                                                  idx === i ? (x.kind === "cron" ? { ...x, expr: nextExpr } : x) : x
+                                                ),
+                                              };
+                                              setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                            }}
+                                            className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 font-mono text-[11px] text-[color:var(--ck-text-primary)]"
+                                            placeholder="0 9 * * 1,3,5"
+                                          />
+                                          <div className="mt-1 grid grid-cols-1 gap-1">
+                                            <select
+                                              value={presets.some((p) => p.expr === expr) ? expr : ""}
+                                              onChange={(e) => {
+                                                const nextExpr = e.target.value;
+                                                if (!nextExpr) return;
+                                                const next: WorkflowFileV1 = {
+                                                  ...wf,
+                                                  triggers: triggers.map((x, idx) =>
+                                                    idx === i ? (x.kind === "cron" ? { ...x, expr: nextExpr } : x) : x
+                                                  ),
+                                                };
+                                                setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                              }}
+                                              className="w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-[11px] text-[color:var(--ck-text-secondary)]"
+                                            >
+                                              {presets.map((p) => (
+                                                <option key={p.label} value={p.expr}>
+                                                  {p.label}
+                                                </option>
+                                              ))}
+                                            </select>
+                                            <div className="text-[10px] text-[color:var(--ck-text-tertiary)]">Presets set the cron; edit freely for advanced schedules.</div>
+                                          </div>
+                                        </label>
+
+                                        <label className="block">
+                                          <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">timezone override</div>
+                                          <input
+                                            value={trigTz}
+                                            onChange={(e) => {
+                                              const nextTz = String(e.target.value || "").trim() || tz;
+                                              const next: WorkflowFileV1 = {
+                                                ...wf,
+                                                triggers: triggers.map((x, idx) =>
+                                                  idx === i ? (x.kind === "cron" ? { ...x, tz: nextTz } : x) : x
+                                                ),
+                                              };
+                                              setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                            }}
+                                            className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                            placeholder={tz}
+                                          />
+                                        </label>
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                <div className="text-xs text-[color:var(--ck-text-secondary)]">No triggers yet.</div>
+                              )}
+                            </div>
                           </div>
 
-                          <div>
-                            <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">config</div>
-                            <pre className="mt-1 max-h-[200px] overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2 text-[10px] text-[color:var(--ck-text-secondary)]">
-                              {JSON.stringify(node.config ?? {}, null, 2)}
-                            </pre>
+                          <div className="border-t border-white/10 pt-3">
+                            <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Node inspector</div>
+                            {workflowSelectedNodeId ? (
+                              (() => {
+                                const node = wf.nodes.find((n) => n.id === workflowSelectedNodeId);
+                                if (!node) return <div className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">No node selected.</div>;
+
+                                return (
+                                  <div className="mt-3 space-y-3">
+                                    <div>
+                                      <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">id</div>
+                                      <div className="mt-1 rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]">
+                                        {node.id}
+                                      </div>
+                                    </div>
+
+                                    <label className="block">
+                                      <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">name</div>
+                                      <input
+                                        value={String(node.name ?? "")}
+                                        onChange={(e) => {
+                                          const nextName = e.target.value;
+                                          const next: WorkflowFileV1 = {
+                                            ...wf,
+                                            nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, name: nextName } : n)),
+                                          };
+                                          setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                        }}
+                                        className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                        placeholder="Optional"
+                                      />
+                                    </label>
+
+                                    <label className="block">
+                                      <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">type</div>
+                                      <select
+                                        value={node.type}
+                                        onChange={(e) => {
+                                          const nextType = e.target.value as WorkflowFileV1["nodes"][number]["type"];
+                                          const next: WorkflowFileV1 = {
+                                            ...wf,
+                                            nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, type: nextType } : n)),
+                                          };
+                                          setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                        }}
+                                        className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                      >
+                                        <option value="start">start</option>
+                                        <option value="end">end</option>
+                                        <option value="llm">llm</option>
+                                        <option value="tool">tool</option>
+                                        <option value="condition">condition</option>
+                                        <option value="delay">delay</option>
+                                        <option value="human_approval">human_approval</option>
+                                      </select>
+                                    </label>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <label className="block">
+                                        <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">x</div>
+                                        <input
+                                          type="number"
+                                          value={typeof node.x === "number" ? node.x : 0}
+                                          onChange={(e) => {
+                                            const nextX = Number(e.target.value);
+                                            const next: WorkflowFileV1 = {
+                                              ...wf,
+                                              nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, x: nextX } : n)),
+                                            };
+                                            setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                          }}
+                                          className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                        />
+                                      </label>
+                                      <label className="block">
+                                        <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">y</div>
+                                        <input
+                                          type="number"
+                                          value={typeof node.y === "number" ? node.y : 0}
+                                          onChange={(e) => {
+                                            const nextY = Number(e.target.value);
+                                            const next: WorkflowFileV1 = {
+                                              ...wf,
+                                              nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, y: nextY } : n)),
+                                            };
+                                            setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                          }}
+                                          className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                        />
+                                      </label>
+                                    </div>
+
+                                    <div>
+                                      <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">config</div>
+                                      <pre className="mt-1 max-h-[200px] overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2 text-[10px] text-[color:var(--ck-text-secondary)]">
+                                        {JSON.stringify(node.config ?? {}, null, 2)}
+                                      </pre>
+                                    </div>
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <div className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">Select a node.</div>
+                            )}
                           </div>
                         </div>
                       );
                     })()
                   ) : (
-                    <div className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">Select a node.</div>
+                    <div className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">Load or create a workflow to edit triggers.</div>
                   )}
                 </div>
               </div>
