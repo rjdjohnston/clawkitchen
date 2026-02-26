@@ -1751,9 +1751,85 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                             </div>
 
                             {selectedWorkflowRun ? (
-                              <pre className="mt-2 max-h-[220px] overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2 text-[10px] text-[color:var(--ck-text-secondary)]">
-                                {JSON.stringify(selectedWorkflowRun, null, 2)}
-                              </pre>
+                              (() => {
+                                const run =
+                                  selectedWorkflowRun && typeof selectedWorkflowRun === "object"
+                                    ? (selectedWorkflowRun as Record<string, unknown>)
+                                    : ({} as Record<string, unknown>);
+                                const nodesVal = (run as Record<string, unknown>).nodes;
+                                const nodes = Array.isArray(nodesVal) ? (nodesVal as unknown[]) : [];
+                                return (
+                                  <div className="mt-2 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <div className="text-[11px] font-medium text-[color:var(--ck-text-primary)]">Run detail</div>
+                                      <div className="text-[10px] text-[color:var(--ck-text-tertiary)]">
+                                        <span className="font-mono">{String(run?.status ?? "")}</span>
+                                        {run?.startedAt ? <span> · {String(run.startedAt)}</span> : null}
+                                      </div>
+                                    </div>
+
+                                    {run?.summary ? (
+                                      <div className="mt-1 text-[11px] text-[color:var(--ck-text-secondary)]">{String(run.summary)}</div>
+                                    ) : null}
+
+                                    <div className="mt-2">
+                                      <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">per-node results</div>
+                                      {nodes.length ? (
+                                        <div className="mt-1 space-y-1">
+                                          {nodes.slice(0, 50).map((n, idx) => {
+                                            const node = n && typeof n === "object" ? (n as Record<string, unknown>) : ({} as Record<string, unknown>);
+                                            const status = String(node.status ?? "");
+                                            const statusColor =
+                                              status === "success"
+                                                ? "text-emerald-200"
+                                                : status === "error"
+                                                  ? "text-red-200"
+                                                  : status === "running"
+                                                    ? "text-amber-200"
+                                                    : "text-[color:var(--ck-text-secondary)]";
+                                            const nodeId = String(node.nodeId ?? "");
+                                            const errVal = node.error;
+                                            const outputVal = node.output;
+                                            return (
+                                              <div key={`${nodeId || "node"}-${idx}`} className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 p-2">
+                                                <div className="flex items-center justify-between gap-2">
+                                                  <div className="text-[11px] text-[color:var(--ck-text-primary)]">
+                                                    <span className="font-mono">{nodeId}</span>
+                                                  </div>
+                                                  <div className={`text-[10px] font-medium ${statusColor}`}>{status}</div>
+                                                </div>
+                                                {errVal ? (
+                                                  <div className="mt-1 text-[10px] text-red-100">
+                                                    {typeof errVal === "string"
+                                                      ? errVal
+                                                      : typeof errVal === "object" && errVal && "message" in errVal
+                                                        ? String((errVal as Record<string, unknown>).message ?? "")
+                                                        : String(errVal)}
+                                                  </div>
+                                                ) : null}
+                                                {typeof outputVal !== "undefined" ? (
+                                                  <pre className="mt-1 max-h-[120px] overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2 text-[10px] text-[color:var(--ck-text-secondary)]">
+                                                    {JSON.stringify(outputVal, null, 2)}
+                                                  </pre>
+                                                ) : null}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      ) : (
+                                        <div className="mt-1 text-xs text-[color:var(--ck-text-secondary)]">No node results recorded on this run yet.</div>
+                                      )}
+                                    </div>
+
+                                    <details className="mt-2">
+                                      <summary className="cursor-pointer select-none text-[10px] text-[color:var(--ck-text-tertiary)]">raw JSON</summary>
+                                      <pre className="mt-2 max-h-[220px] overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2 text-[10px] text-[color:var(--ck-text-secondary)]">
+                                        {JSON.stringify(selectedWorkflowRun, null, 2)}
+                                      </pre>
+                                    </details>
+                                  </div>
+                                );
+                              })()
                             ) : null}
                           </div>
 
