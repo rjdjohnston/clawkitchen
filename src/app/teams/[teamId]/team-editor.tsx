@@ -1,7 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { createPortal as reactCreatePortal } from "react-dom";
+import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { parse as parseYaml } from "yaml";
 import { useRouter } from "next/navigation";
@@ -168,8 +167,6 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
   const [portalsReady, setPortalsReady] = useState(false);
   useEffect(() => setPortalsReady(true), []);
-
-  const portal = (node: ReactNode) => (typeof document === "undefined" ? null : reactCreatePortal(node, document.body));
 
 
   const [workflowRuns, setWorkflowRuns] = useState<string[]>([]);
@@ -1324,7 +1321,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
             </div>
 
             {portalsReady && workflowCreateOpen
-              ? portal(
+              ? createPortal(
                   <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
                     <div className="ck-glass-strong w-full max-w-lg rounded-[var(--ck-radius-lg)] border border-white/10 p-4 shadow-[var(--ck-shadow-2)]">
                       <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Create workflow</div>
@@ -1396,8 +1393,9 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                         </button>
                       </div>
                     </div>
-                  </div>
-                  )
+                  </div>,
+                  document.body
+                )
               : null}
 
             <div className="mt-4 text-xs font-medium text-[color:var(--ck-text-secondary)]">Files</div>
@@ -1505,7 +1503,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
           </div>
 
           {portalsReady && workflowEditorOpen
-            ? portal(
+            ? createPortal(
                 <div className="fixed inset-0 z-50 bg-black/70">
                   <div className="ck-glass-strong h-full w-full overflow-hidden border border-white/10 shadow-[var(--ck-shadow-2)]">
                 <div className="flex items-center justify-between border-b border-white/10 bg-black/20 p-3">
@@ -2657,8 +2655,9 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
           </div>
                 </div>
               </div>
-            </div>
-            )
+            </div>,
+            document.body
+          )
         : null}
 
         </div>
