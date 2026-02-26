@@ -24,12 +24,20 @@ export async function GET(req: Request) {
       args: { action: "list", includeDisabled: true },
     });
 
+    // Tool responses may come back as either:
+    // - {type:"text", text:"{...}"} (stringified JSON)
+    // - {type:"json", json:{...}} (already-parsed)
     const text = result?.content?.find((c) => c.type === "text")?.text;
-    if (!text) {
-      return NextResponse.json({ ok: true, jobs: [] });
-    }
+    const jsonPayload = (result?.content as Array<{ type: string; text?: string; json?: unknown }> | undefined)?.find(
+      (c) => c.type === "json" && c.json,
+    )?.json;
 
-    const parsed = JSON.parse(text) as { jobs?: unknown[] };
+    const parsed = ((): { jobs?: unknown[] } => {
+      if (jsonPayload && typeof jsonPayload === "object") return jsonPayload as { jobs?: unknown[] };
+      if (text && text.trim()) return JSON.parse(text) as { jobs?: unknown[] };
+      return { jobs: [] };
+    })();
+
     const jobs = Array.isArray(parsed.jobs) ? parsed.jobs : [];
 
     // Enrich: map installed cron IDs → scope (team/agent) using provenance files.
