@@ -65,3 +65,18 @@ export async function writeWorkflow(teamId: string, workflow: WorkflowFileV1) {
   await fs.writeFile(p, JSON.stringify(toWrite, null, 2) + "\n", "utf8");
   return { ok: true as const, path: p };
 }
+
+export async function deleteWorkflow(teamId: string, workflowId: string) {
+  const id = assertSafeWorkflowId(workflowId);
+  const dir = await getTeamWorkflowsDir(teamId);
+  const p = path.join(dir, workflowFileName(id));
+  try {
+    await fs.unlink(p);
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && (err as { code?: unknown }).code === "ENOENT") {
+      return { ok: true as const, path: p, existed: false as const };
+    }
+    throw err;
+  }
+  return { ok: true as const, path: p, existed: true as const };
+}

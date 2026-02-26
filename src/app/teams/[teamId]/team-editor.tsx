@@ -158,6 +158,8 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [workflowNewEdgeTo, setWorkflowNewEdgeTo] = useState<string>("");
   const [workflowNewEdgeLabel, setWorkflowNewEdgeLabel] = useState<string>("");
 
+  const [workflowEditorOpen, setWorkflowEditorOpen] = useState(false);
+
   const [workflowRuns, setWorkflowRuns] = useState<string[]>([]);
   const [workflowRunsLoading, setWorkflowRunsLoading] = useState(false);
   const [workflowRunsError, setWorkflowRunsError] = useState<string>("");
@@ -1176,7 +1178,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
       {activeTab === "workflows" ? (
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="ck-glass-strong p-4">
+          <div className={workflowEditorOpen ? "ck-glass-strong p-4" : "ck-glass-strong p-4 lg:col-span-3"}>
             <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Workflows (file-first)</div>
             <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
               Stored in <code>shared-context/workflows/&lt;id&gt;.workflow.json</code> inside the team workspace.
@@ -1189,6 +1191,38 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
             ) : null}
 
             <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                disabled={workflowSaving}
+                onClick={() => {
+                  const id = prompt("Workflow id (lowercase letters, numbers, dashes)", "new-workflow") || "";
+                  const safeId = String(id).trim();
+                  if (!safeId) return;
+                  const name = prompt("Workflow name", "New workflow") || "";
+
+                  const workflow: WorkflowFileV1 = {
+                    schema: "clawkitchen.workflow.v1",
+                    id: safeId,
+                    name: String(name || safeId),
+                    version: 1,
+                    timezone: "America/New_York",
+                    triggers: [],
+                    nodes: [
+                      { id: "start", type: "start", name: "Start", x: 120, y: 120 },
+                      { id: "end", type: "end", name: "End", x: 420, y: 120 },
+                    ],
+                    edges: [{ id: "e1", from: "start", to: "end" }],
+                    meta: {},
+                  };
+
+                  setSelectedWorkflowFile(`${safeId}.workflow.json`);
+                  setWorkflowJsonText(JSON.stringify(workflow, null, 2) + "\n");
+                  setWorkflowEditorOpen(true);
+                }}
+                className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
+              >
+                Add workflow
+              </button>
+
               <button
                 disabled={workflowSaving}
                 onClick={async () => {
@@ -1255,6 +1289,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                       setWorkflowFiles(list);
                       setSelectedWorkflowFile("marketing-cadence.workflow.json");
                       setWorkflowJsonText(JSON.stringify(workflow, null, 2) + "\n");
+                      setWorkflowEditorOpen(true);
                     }
 
                     flashMessage("Created workflow template: marketing-cadence", "success");
@@ -1298,44 +1333,124 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
             <ul className="mt-2 space-y-1">
               {workflowFilesLoading ? <li className="text-sm text-[color:var(--ck-text-secondary)]">Loading…</li> : null}
               {workflowFiles.length ? (
-                workflowFiles.map((f) => (
-                  <li key={f}>
-                    <button
-                      onClick={async () => {
-                        setSelectedWorkflowFile(f);
-                        setWorkflowSaving(true);
-                        setWorkflowFilesError("");
-                        try {
-                          const id = String(f).replace(/\.workflow\.json$/i, "");
-                          const res = await fetch(`/api/teams/workflows?teamId=${encodeURIComponent(teamId)}&id=${encodeURIComponent(id)}`, {
-                            cache: "no-store",
-                          });
-                          const json = await res.json();
-                          if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load workflow");
-                          setWorkflowJsonText(JSON.stringify(json.workflow, null, 2) + "\n");
-                        } catch (e: unknown) {
-                          setWorkflowFilesError(e instanceof Error ? e.message : String(e));
-                        } finally {
-                          setWorkflowSaving(false);
-                        }
-                      }}
-                      className={
-                        selectedWorkflowFile === f
-                          ? "w-full rounded-[var(--ck-radius-sm)] bg-white/10 px-3 py-2 text-left text-sm text-[color:var(--ck-text-primary)]"
-                          : "w-full rounded-[var(--ck-radius-sm)] px-3 py-2 text-left text-sm text-[color:var(--ck-text-secondary)] hover:bg-white/5"
-                      }
-                    >
-                      {f}
-                    </button>
-                  </li>
-                ))
+                workflowFiles.map((f) => {
+                  const isActive = selectedWorkflowFile === f;
+                  return (
+                    <li key={f} className="flex items-center justify-between gap-3 rounded-[var(--ck-radius-sm)] px-2 py-1 hover:bg-white/5">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWorkflowFile(f)}
+                        className="flex min-w-0 items-center gap-2 text-left"
+                      >
+                        <span className={isActive ? "text-green-400" : "text-white/25"}>{isActive ? "✓" : "•"}</span>
+                        <span
+                          className={
+                            isActive
+                              ? "truncate text-sm text-[color:var(--ck-text-primary)]"
+                              : "truncate text-sm text-[color:var(--ck-text-secondary)]"
+                          }
+                        >
+                          {f}
+                        </span>
+                      </button>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={workflowSaving}
+                          onClick={async () => {
+                            setSelectedWorkflowFile(f);
+                            setWorkflowSaving(true);
+                            setWorkflowFilesError("");
+                            try {
+                              const id = String(f).replace(/\.workflow\.json$/i, "");
+                              const res = await fetch(
+                                `/api/teams/workflows?teamId=${encodeURIComponent(teamId)}&id=${encodeURIComponent(id)}`,
+                                { cache: "no-store" }
+                              );
+                              const json = await res.json();
+                              if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load workflow");
+                              setWorkflowJsonText(JSON.stringify(json.workflow, null, 2) + "\n");
+                              setWorkflowEditorOpen(true);
+                            } catch (e: unknown) {
+                              setWorkflowFilesError(e instanceof Error ? e.message : String(e));
+                            } finally {
+                              setWorkflowSaving(false);
+                            }
+                          }}
+                          className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10 disabled:opacity-50"
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={workflowSaving}
+                          onClick={async () => {
+                            if (!confirm(`Delete workflow ${f}?`)) return;
+                            setWorkflowSaving(true);
+                            setWorkflowFilesError("");
+                            try {
+                              const id = String(f).replace(/\.workflow\.json$/i, "");
+                              const res = await fetch(
+                                `/api/teams/workflows?teamId=${encodeURIComponent(teamId)}&id=${encodeURIComponent(id)}`,
+                                { method: "DELETE" }
+                              );
+                              const json = await res.json();
+                              if (!res.ok || !json.ok) throw new Error(json.error || "Failed to delete workflow");
+
+                              const listRes = await fetch(`/api/teams/workflows?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" });
+                              const listJson = await listRes.json();
+                              if (listRes.ok && listJson.ok) {
+                                const files = Array.isArray(listJson.files) ? listJson.files : [];
+                                const list = files.map((x: unknown) => String(x ?? "").trim()).filter((x: string) => Boolean(x));
+                                setWorkflowFiles(list);
+                              }
+
+                              if (selectedWorkflowFile === f) {
+                                setSelectedWorkflowFile("");
+                                setWorkflowJsonText("");
+                              }
+
+                              flashMessage(`Deleted workflow: ${f}`, "success");
+                            } catch (e: unknown) {
+                              setWorkflowFilesError(e instanceof Error ? e.message : String(e));
+                            } finally {
+                              setWorkflowSaving(false);
+                            }
+                          }}
+                          className="rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-100 hover:bg-red-500/20 disabled:opacity-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })
               ) : !workflowFilesLoading ? (
                 <li className="text-sm text-[color:var(--ck-text-secondary)]">No workflows yet.</li>
               ) : null}
             </ul>
           </div>
 
-          <div className="ck-glass-strong p-4 lg:col-span-2">
+          {workflowEditorOpen ? (
+            <div className="fixed inset-0 z-50 bg-black/70 p-4">
+              <div className="ck-glass-strong mx-auto h-[calc(100vh-2rem)] max-w-[1200px] overflow-hidden rounded-[var(--ck-radius-lg)] border border-white/10 shadow-[var(--ck-shadow-2)]">
+                <div className="flex items-center justify-between border-b border-white/10 bg-black/20 p-3">
+                  <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">
+                    Workflow editor{selectedWorkflowFile ? ` — ${selectedWorkflowFile}` : ""}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setWorkflowEditorOpen(false)}
+                    className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="h-[calc(100%-3rem)] overflow-auto p-4">
+                  <div className="ck-glass-strong p-4 lg:col-span-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Workflow editor</div>
 
@@ -2464,6 +2579,11 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
               />
             )}
           </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
         </div>
       ) : null}
 
