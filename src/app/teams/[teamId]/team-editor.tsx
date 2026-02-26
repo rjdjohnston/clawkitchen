@@ -7,6 +7,7 @@ import { DeleteTeamModal } from "./DeleteTeamModal";
 import { PublishChangesModal } from "./PublishChangesModal";
 import { useToast } from "@/components/ToastProvider";
 import type { WorkflowFileV1 } from "@/lib/workflows/types";
+import { validateWorkflowFileV1 } from "@/lib/workflows/validate";
 
 type RecipeListItem = {
   id: string;
@@ -188,6 +189,15 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
       return e instanceof Error ? e.message : "Invalid JSON";
     }
   }, [workflowJsonText]);
+
+  const workflowValidation = useMemo(() => {
+    if (!workflowParsed) return { errors: [], warnings: [] };
+    try {
+      return validateWorkflowFileV1(workflowParsed);
+    } catch (e: unknown) {
+      return { errors: [e instanceof Error ? e.message : String(e)], warnings: [] };
+    }
+  }, [workflowParsed]);
 
   useEffect(() => {
     const wfId = String(workflowParsed?.id ?? "").trim();
@@ -1388,13 +1398,14 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
                 <button
                   type="button"
-                  disabled={workflowSaving || !workflowParsed || Boolean(workflowParseError)}
+                  disabled={workflowSaving || !workflowParsed || Boolean(workflowParseError) || workflowValidation.errors.length > 0}
                   onClick={() => {
                     setWorkflowFilesError("");
                     try {
                       const wf = workflowParsed;
                       if (!wf) throw new Error("No workflow loaded");
                       if (workflowParseError) throw new Error(`Invalid JSON: ${workflowParseError}`);
+                      if (workflowValidation.errors.length) throw new Error("Fix workflow validation errors before exporting");
 
                       const filename = `${wf.id || "workflow"}.workflow.json`;
                       const blob = new Blob([JSON.stringify(wf, null, 2) + "\n"], { type: "application/json" });
@@ -1417,7 +1428,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                 </button>
 
                 <button
-                  disabled={workflowSaving || !workflowParsed || Boolean(workflowParseError)}
+                  disabled={workflowSaving || !workflowParsed || Boolean(workflowParseError) || workflowValidation.errors.length > 0}
                   onClick={async () => {
                     setWorkflowSaving(true);
                     setWorkflowFilesError("");
@@ -1425,6 +1436,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                       const wf = workflowParsed;
                       if (!wf) throw new Error("No workflow loaded");
                       if (workflowParseError) throw new Error(`Invalid JSON: ${workflowParseError}`);
+                      if (workflowValidation.errors.length) throw new Error("Fix workflow validation errors before saving");
 
                       const res = await fetch("/api/teams/workflows", {
                         method: "POST",
@@ -1459,6 +1471,28 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
             {workflowParseError ? (
               <div className="mt-3 rounded-[var(--ck-radius-sm)] border border-yellow-400/30 bg-yellow-500/10 p-3 text-sm text-yellow-100">
                 JSON parse error: {workflowParseError}
+              </div>
+            ) : null}
+
+            {!workflowParseError && workflowValidation.errors.length ? (
+              <div className="mt-3 rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">
+                <div className="font-medium">Workflow validation errors</div>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {workflowValidation.errors.map((e) => (
+                    <li key={e}>{e}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {!workflowParseError && !workflowValidation.errors.length && workflowValidation.warnings.length ? (
+              <div className="mt-3 rounded-[var(--ck-radius-sm)] border border-yellow-400/30 bg-yellow-500/10 p-3 text-sm text-yellow-100">
+                <div className="font-medium">Workflow validation warnings</div>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {workflowValidation.warnings.map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
               </div>
             ) : null}
 
