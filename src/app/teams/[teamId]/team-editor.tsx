@@ -7,6 +7,7 @@ import { DeleteTeamModal } from "./DeleteTeamModal";
 import { PublishChangesModal } from "./PublishChangesModal";
 import { useToast } from "@/components/ToastProvider";
 import { OrchestratorPanel } from "./OrchestratorPanel";
+import type { WorkflowFileV1 } from "@/lib/workflows/types";
 
 type RecipeListItem = {
   id: string;
@@ -108,7 +109,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [toName, setToName] = useState<string>(teamId);
   const [content, setContent] = useState<string>("");
   const [loadedRecipeHash, setLoadedRecipeHash] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"recipe" | "agents" | "skills" | "cron" | "files" | "orchestrator">("recipe");
+  const [activeTab, setActiveTab] = useState<"recipe" | "agents" | "skills" | "cron" | "workflows" | "files" | "orchestrator">("recipe");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -137,6 +138,13 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
 
   const [cronJobs, setCronJobs] = useState<unknown[]>([]);
   const [cronLoading, setCronLoading] = useState(false);
+
+  const [workflowFiles, setWorkflowFiles] = useState<string[]>([]);
+  const [workflowFilesLoading, setWorkflowFilesLoading] = useState(false);
+  const [workflowFilesError, setWorkflowFilesError] = useState<string>("");
+  const [selectedWorkflowFile, setSelectedWorkflowFile] = useState<string>("");
+  const [workflowJsonText, setWorkflowJsonText] = useState<string>("");
+  const [workflowSaving, setWorkflowSaving] = useState(false);
 
   const [teamAgents, setTeamAgents] = useState<Array<{ id: string; identityName?: string }>>([]);
   const [teamAgentsLoading, setTeamAgentsLoading] = useState(false);
@@ -263,16 +271,18 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         void (async () => {
           setTeamFilesLoading(true);
           setCronLoading(true);
+          setWorkflowFilesLoading(true);
           setTeamAgentsLoading(true);
           setSkillsLoading(true);
 
           try {
-            const [filesRes, cronRes, agentsRes, skillsRes, availableSkillsRes] = await Promise.all([
+            const [filesRes, cronRes, agentsRes, skillsRes, availableSkillsRes, workflowsRes] = await Promise.all([
               fetch(`/api/teams/files?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" }),
               fetch(`/api/cron/jobs?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" }),
               fetch("/api/agents", { cache: "no-store" }),
               fetch(`/api/teams/skills?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" }),
               fetch("/api/skills/available", { cache: "no-store" }),
+              fetch(`/api/teams/workflows?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" }),
             ]);
 
             try {
@@ -300,6 +310,22 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
               if (cronRes.ok && cronJson.ok) {
                 const all = Array.isArray(cronJson.jobs) ? cronJson.jobs : [];
                 setCronJobs(all);
+              }
+            } catch {
+              // ignore
+            }
+
+            try {
+              const workflowsJson = (await workflowsRes.json()) as { ok?: boolean; files?: unknown[]; dir?: unknown };
+              if (workflowsRes.ok && workflowsJson.ok) {
+                const files = Array.isArray(workflowsJson.files) ? workflowsJson.files : [];
+                const list = files.map((f) => String(f ?? '').trim()).filter((f) => Boolean(f));
+                setWorkflowFiles(list);
+                setSelectedWorkflowFile((prev) => {
+                  const p = String(prev ?? '').trim();
+                  if (p && list.includes(p)) return p;
+                  return list[0] ?? '';
+                });
               }
             } catch {
               // ignore
@@ -348,6 +374,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
           } finally {
             setTeamFilesLoading(false);
             setCronLoading(false);
+            setWorkflowFilesLoading(false);
             setTeamAgentsLoading(false);
             setSkillsLoading(false);
           }
@@ -515,6 +542,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
             { id: "agents", label: "Agents" },
             { id: "skills", label: "Skills" },
             { id: "cron", label: "Cron" },
+            { id: "workflows", label: "Workflows" },
             { id: "files", label: "Files" },
             { id: "orchestrator", label: "Orchestrator" },
           ] as const
@@ -1020,7 +1048,218 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         </div>
       ) : null}
 
-      {activeTab === "files" ? (
+      {activeTab === "workflows" ? (
+        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="ck-glass-strong p-4">
+            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Workflows (file-first)</div>
+            <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
+              Stored in <code>shared-context/workflows/&lt;id&gt;.workflow.json</code> inside the team workspace.
+            </div>
+
+            {workflowFilesError ? (
+              <div className="mt-3 rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">
+                {workflowFilesError}
+              </div>
+            ) : null}
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                disabled={workflowSaving}
+                onClick={async () => {
+                  setWorkflowSaving(true);
+                  setWorkflowFilesError("");
+                  try {
+                    // Create the MVP built-in template (Marketing Cadence v1).
+                    const workflow: WorkflowFileV1 = {
+                      schema: "clawkitchen.workflow.v1",
+                      id: "marketing-cadence",
+                      name: "Marketing Cadence (v1)",
+                      version: 1,
+                      timezone: "America/New_York",
+                      triggers: [
+                        { kind: "cron", id: "content-cadence", name: "Content cadence", enabled: true, expr: "0 9 * * 1,3,5", tz: "America/New_York" },
+                        { kind: "cron", id: "seasonal-scan", name: "Seasonal scan", enabled: true, expr: "0 8 * * *", tz: "America/New_York" },
+                        { kind: "cron", id: "weekly-recap", name: "Weekly recap", enabled: false, expr: "30 9 * * 1", tz: "America/New_York" },
+                      ],
+                      nodes: [
+                        { id: "start", type: "start", name: "Start" },
+                        { id: "research", type: "llm", name: "Research" },
+                        { id: "draft_assets", type: "llm", name: "Draft assets" },
+                        { id: "qc_brand", type: "llm", name: "QC brand" },
+                        { id: "approval", type: "human_approval", name: "Approval" },
+                        { id: "post_x", type: "tool", name: "Post: X" },
+                        { id: "post_instagram", type: "tool", name: "Post: Instagram" },
+                        { id: "post_tiktok", type: "tool", name: "Post: TikTok" },
+                        { id: "post_youtube", type: "tool", name: "Post: YouTube" },
+                        { id: "writeback", type: "tool", name: "Writeback" },
+                        { id: "end", type: "end", name: "End" },
+                      ],
+                      edges: [
+                        { id: "e1", from: "start", to: "research" },
+                        { id: "e2", from: "research", to: "draft_assets" },
+                        { id: "e3", from: "draft_assets", to: "qc_brand" },
+                        { id: "e4", from: "qc_brand", to: "approval" },
+                        { id: "e5", from: "approval", to: "post_x", label: "approve" },
+                        { id: "e6", from: "post_x", to: "post_instagram" },
+                        { id: "e7", from: "post_instagram", to: "post_tiktok" },
+                        { id: "e8", from: "post_tiktok", to: "post_youtube" },
+                        { id: "e9", from: "post_youtube", to: "writeback" },
+                        { id: "e10", from: "writeback", to: "end" },
+                      ],
+                      meta: {
+                        templateId: "marketing-cadence-v1",
+                        approvalGateRequired: true,
+                      },
+                    };
+
+                    const res = await fetch("/api/teams/workflows", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ teamId, workflow }),
+                    });
+                    const json = await res.json();
+                    if (!res.ok || !json.ok) throw new Error(json.error || "Failed to write workflow");
+
+                    // Refresh list
+                    const listRes = await fetch(`/api/teams/workflows?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" });
+                    const listJson = await listRes.json();
+                    if (listRes.ok && listJson.ok) {
+                      const files = Array.isArray(listJson.files) ? listJson.files : [];
+                      const list = files.map((f: unknown) => String(f ?? "").trim()).filter((f: string) => Boolean(f));
+                      setWorkflowFiles(list);
+                      setSelectedWorkflowFile("marketing-cadence.workflow.json");
+                      setWorkflowJsonText(JSON.stringify(workflow, null, 2) + "\n");
+                    }
+
+                    flashMessage("Created workflow template: marketing-cadence", "success");
+                  } catch (e: unknown) {
+                    setWorkflowFilesError(e instanceof Error ? e.message : String(e));
+                  } finally {
+                    setWorkflowSaving(false);
+                  }
+                }}
+                className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
+              >
+                {workflowSaving ? "Working…" : "Create Marketing Cadence template"}
+              </button>
+
+              <button
+                disabled={workflowSaving}
+                onClick={async () => {
+                  setWorkflowSaving(true);
+                  setWorkflowFilesError("");
+                  try {
+                    const res = await fetch(`/api/teams/workflows?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" });
+                    const json = await res.json();
+                    if (!res.ok || !json.ok) throw new Error(json.error || "Failed to list workflows");
+                    const files = Array.isArray(json.files) ? json.files : [];
+                    const list = files.map((f: unknown) => String(f ?? "").trim()).filter((f: string) => Boolean(f));
+                    setWorkflowFiles(list);
+                    flashMessage("Refreshed workflow list", "success");
+                  } catch (e: unknown) {
+                    setWorkflowFilesError(e instanceof Error ? e.message : String(e));
+                  } finally {
+                    setWorkflowSaving(false);
+                  }
+                }}
+                className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-white/10 disabled:opacity-50"
+              >
+                Refresh
+              </button>
+            </div>
+
+            <div className="mt-4 text-xs font-medium text-[color:var(--ck-text-secondary)]">Files</div>
+            <ul className="mt-2 space-y-1">
+              {workflowFilesLoading ? <li className="text-sm text-[color:var(--ck-text-secondary)]">Loading…</li> : null}
+              {workflowFiles.length ? (
+                workflowFiles.map((f) => (
+                  <li key={f}>
+                    <button
+                      onClick={async () => {
+                        setSelectedWorkflowFile(f);
+                        setWorkflowSaving(true);
+                        setWorkflowFilesError("");
+                        try {
+                          const id = String(f).replace(/\.workflow\.json$/i, "");
+                          const res = await fetch(`/api/teams/workflows?teamId=${encodeURIComponent(teamId)}&id=${encodeURIComponent(id)}`, {
+                            cache: "no-store",
+                          });
+                          const json = await res.json();
+                          if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load workflow");
+                          setWorkflowJsonText(JSON.stringify(json.workflow, null, 2) + "\n");
+                        } catch (e: unknown) {
+                          setWorkflowFilesError(e instanceof Error ? e.message : String(e));
+                        } finally {
+                          setWorkflowSaving(false);
+                        }
+                      }}
+                      className={
+                        selectedWorkflowFile === f
+                          ? "w-full rounded-[var(--ck-radius-sm)] bg-white/10 px-3 py-2 text-left text-sm text-[color:var(--ck-text-primary)]"
+                          : "w-full rounded-[var(--ck-radius-sm)] px-3 py-2 text-left text-sm text-[color:var(--ck-text-secondary)] hover:bg-white/5"
+                      }
+                    >
+                      {f}
+                    </button>
+                  </li>
+                ))
+              ) : !workflowFilesLoading ? (
+                <li className="text-sm text-[color:var(--ck-text-secondary)]">No workflows yet.</li>
+              ) : null}
+            </ul>
+          </div>
+
+          <div className="ck-glass-strong p-4 lg:col-span-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Edit JSON</div>
+              <button
+                disabled={workflowSaving}
+                onClick={async () => {
+                  setWorkflowSaving(true);
+                  setWorkflowFilesError("");
+                  try {
+                    const parsed = JSON.parse(workflowJsonText || "{}") as WorkflowFileV1;
+                    const res = await fetch("/api/teams/workflows", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ teamId, workflow: parsed }),
+                    });
+                    const json = await res.json();
+                    if (!res.ok || !json.ok) throw new Error(json.error || "Failed to save workflow");
+                    flashMessage(`Saved workflow: ${parsed.id}`, "success");
+
+                    const listRes = await fetch(`/api/teams/workflows?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" });
+                    const listJson = await listRes.json();
+                    if (listRes.ok && listJson.ok) {
+                      const files = Array.isArray(listJson.files) ? listJson.files : [];
+                      const list = files.map((f: unknown) => String(f ?? "").trim()).filter((f: string) => Boolean(f));
+                      setWorkflowFiles(list);
+                      setSelectedWorkflowFile(`${parsed.id}.workflow.json`);
+                    }
+                  } catch (e: unknown) {
+                    setWorkflowFilesError(e instanceof Error ? e.message : String(e));
+                  } finally {
+                    setWorkflowSaving(false);
+                  }
+                }}
+                className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
+              >
+                {workflowSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+
+            <textarea
+              value={workflowJsonText}
+              onChange={(e) => setWorkflowJsonText(e.target.value)}
+              className="mt-3 h-[55vh] w-full resize-none rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-3 font-mono text-xs text-[color:var(--ck-text-primary)]"
+              spellCheck={false}
+              placeholder="Select a workflow from the left (or create the template)."
+            />
+          </div>
+        </div>
+      ) : null}
+
+{activeTab === "files" ? (
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="ck-glass-strong p-4">
             <div className="flex items-center justify-between gap-3">
