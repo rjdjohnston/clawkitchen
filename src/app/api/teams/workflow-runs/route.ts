@@ -76,24 +76,49 @@ export async function POST(req: Request) {
       const decidedAt = nowIso();
       const nextState = action === "approve" ? "approved" : action === "request_changes" ? "changes_requested" : "canceled";
 
-      const nextNodes: WorkflowRunNodeResultV1[] = Array.isArray(run.nodes)
-        ? run.nodes.map((n) => {
-            if (n.nodeId !== approvalNodeId) return n;
-            return {
-              ...n,
-              status: nextState === "canceled" ? "error" : "success",
-              endedAt: decidedAt,
-              output: {
-                ...(typeof n.output === "object" && n.output ? (n.output as Record<string, unknown>) : {}),
-                decision: nextState,
-                note,
-              },
-            };
-          })
-        : [];
-
       const nextStatus: WorkflowRunFileV1["status"] =
         nextState === "approved" ? "success" : nextState === "canceled" ? "canceled" : "waiting_for_approval";
+
+      const nextNodes: WorkflowRunNodeResultV1[] = Array.isArray(run.nodes)
+        ? run.nodes.map((n) => {
+            if (n.nodeId === approvalNodeId) {
+              const existingOutput = typeof n.output === "object" && n.output ? (n.output as Record<string, unknown>) : {};
+              return {
+                ...n,
+                status: nextState === "approved" ? "success" : nextState === "canceled" ? "error" : "waiting",
+                endedAt: nextState === "changes_requested" ? n.endedAt : decidedAt,
+                output: {
+                  ...existingOutput,
+                  decision: nextState,
+                  note,
+                },
+              };
+            }
+
+            // For approve/cancel, resolve any remaining pending nodes so the run detail view is coherent.
+            if (nextState === "approved" && n.status === "pending") {
+              return {
+                ...n,
+                status: "success",
+                startedAt: n.startedAt ?? decidedAt,
+                endedAt: decidedAt,
+                output: n.output ?? { note: "(execution engine not yet wired)" },
+              };
+            }
+
+            if (nextState === "canceled" && n.status === "pending") {
+              return {
+                ...n,
+                status: "skipped",
+                startedAt: n.startedAt ?? decidedAt,
+                endedAt: decidedAt,
+                output: n.output ?? { note: "skipped due to cancel" },
+              };
+            }
+
+            return n;
+          })
+        : [];
 
       const nextRun: WorkflowRunFileV1 = {
         ...run,
@@ -103,7 +128,7 @@ export async function POST(req: Request) {
           nodeId: approvalNodeId,
           state: nextState,
           requestedAt: run.approval?.requestedAt,
-          decidedAt,
+          decidedAt: nextState === "changes_requested" ? undefined : decidedAt,
           note,
         },
         nodes: nextNodes,
