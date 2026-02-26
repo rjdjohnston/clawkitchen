@@ -149,6 +149,34 @@ export async function POST(req: Request) {
             const wf = (await readWorkflow(teamId, workflowId)).workflow;
             const t0 = Date.now();
 
+            const templateId =
+              wf.meta && typeof wf.meta === "object" && "templateId" in wf.meta ? (wf.meta as Record<string, unknown>).templateId : undefined;
+            const isMarketingCadence = templateId === "marketing-cadence-v1";
+
+            const marketingDrafts = isMarketingCadence
+              ? {
+                  x: {
+                    hook: "Stop losing hours to repetitive agent setup.",
+                    body: "ClawRecipes scaffolds entire teams of agents in one command — workflows, roles, conventions, and a human-approval gate before posting.",
+                  },
+                  instagram: {
+                    hook: "Ship agent workflows faster.",
+                    body: "From idea → drafted assets → brand QC → approval → posting. File-first workflows you can export and version.",
+                    assetNotes: "Square image: diagram of workflow nodes + approval gate.",
+                  },
+                  tiktok: {
+                    hook: "POV: you stop copy/pasting prompts.",
+                    script: "Today I’m building a marketing cadence workflow that researches, drafts, QC’s, then waits for human approval before it posts. File-first. Portable. No magic.",
+                    assetNotes: "15–25s screen recording of the canvas + approval buttons.",
+                  },
+                  youtube: {
+                    hook: "Build a marketing cadence workflow (with human approval) in 2 minutes.",
+                    script: "We’ll wire research → drafts → QC → approval → post nodes, and persist the whole thing to shared-context/workflows/*.workflow.json so it’s portable.",
+                    assetNotes: "Thumbnail: workflow canvas with 'Approve & Post' highlighted.",
+                  },
+                }
+              : null;
+
             const approvalIdx = wf.nodes.findIndex((n) => n.type === "human_approval");
             const approvalNodeId = approvalIdx >= 0 ? wf.nodes[approvalIdx]?.id : undefined;
 
@@ -168,10 +196,44 @@ export async function POST(req: Request) {
               };
 
               if (n.type === "llm") {
+                const marketingOutput =
+                  beforeApproval && isMarketingCadence
+                    ? n.id === "research"
+                      ? {
+                          model: "(sample)",
+                          kind: "research",
+                          bullets: [
+                            "New agent teams are compelling when they’re portable + file-first.",
+                            "Human approval gates are mandatory for auto-post workflows.",
+                            "Cron triggers need timezone + preset suggestions.",
+                          ],
+                        }
+                      : n.id === "draft_assets"
+                        ? {
+                            model: "(sample)",
+                            kind: "draft_assets",
+                            drafts: marketingDrafts,
+                          }
+                        : n.id === "qc_brand"
+                          ? {
+                              model: "(sample)",
+                              kind: "qc_brand",
+                              notes: [
+                                "Keep claims concrete (no ‘magic’).",
+                                "Mention ClawRecipes before OpenClaw.",
+                                "Explicitly state: no posting without approval.",
+                              ],
+                            }
+                          : {
+                              model: "(sample)",
+                              text: `Sample output for ${n.id}`,
+                            }
+                    : null;
+
                 return {
                   ...base,
                   output: beforeApproval
-                    ? {
+                    ? marketingOutput ?? {
                         model: "(sample)",
                         text: `Sample output for ${n.id}`,
                       }
@@ -194,13 +256,31 @@ export async function POST(req: Request) {
               }
 
               if (n.type === "human_approval") {
+                const approvalPacket = isMarketingCadence
+                  ? {
+                      channel: "(sample)",
+                      decision: "pending",
+                      options: ["approve", "request_changes", "cancel"],
+                      packet: {
+                        templateId: "marketing-cadence-v1",
+                        note: "Per-platform drafts (sample) — approve to post, request changes to loop, or cancel.",
+                        platforms: {
+                          x: marketingDrafts?.x,
+                          instagram: marketingDrafts?.instagram,
+                          tiktok: marketingDrafts?.tiktok,
+                          youtube: marketingDrafts?.youtube,
+                        },
+                      },
+                    }
+                  : {
+                      channel: "(sample)",
+                      decision: "pending",
+                      options: ["approve", "request_changes", "cancel"],
+                    };
+
                 return {
                   ...base,
-                  output: {
-                    channel: "(sample)",
-                    decision: "pending",
-                    options: ["approve", "request_changes", "cancel"],
-                  },
+                  output: approvalPacket,
                 };
               }
 
