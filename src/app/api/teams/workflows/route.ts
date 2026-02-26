@@ -27,12 +27,14 @@ export async function GET(req: Request) {
     if (id) {
       const r = await readWorkflow(teamId, id);
       // avoid duplicate `ok` keys (TS error)
-      const { ok: _ok, ...rest } = r;
+      const { ok, ...rest } = r;
+      void ok;
       return NextResponse.json({ ok: true, ...rest });
     }
 
     const r = await listWorkflows(teamId);
-    const { ok: _ok, ...rest } = r;
+    const { ok, ...rest } = r;
+    void ok;
     return NextResponse.json({ ok: true, ...rest });
   } catch (err: unknown) {
     return NextResponse.json({ ok: false, error: errMessage(err) }, { status: 500 });
@@ -62,7 +64,8 @@ export async function POST(req: Request) {
 
   try {
     const r = await writeWorkflow(teamId, workflowRaw);
-    const { ok: _ok, ...rest } = r;
+    const { ok, ...rest } = r;
+    void ok;
     return NextResponse.json({ ok: true, ...rest });
   } catch (err: unknown) {
     return NextResponse.json({ ok: false, error: errMessage(err) }, { status: 500 });
