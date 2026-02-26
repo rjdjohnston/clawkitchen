@@ -1546,6 +1546,10 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                       const tz = String(wf.timezone ?? "").trim() || "UTC";
                       const triggers = wf.triggers ?? [];
 
+                      const meta = wf.meta && typeof wf.meta === "object" && !Array.isArray(wf.meta) ? (wf.meta as Record<string, unknown>) : {};
+                      const approvalProvider = String(meta.approvalProvider ?? "telegram").trim() || "telegram";
+                      const approvalTarget = String(meta.approvalTarget ?? "").trim();
+
                       const presets = [
                         { label: "(no preset)", expr: "" },
                         { label: "Mon/Wed/Fri 09:00 local", expr: "0 9 * * 1,3,5" },
@@ -1568,6 +1572,44 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                               placeholder="America/New_York"
                             />
                           </label>
+
+                          <div className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
+                            <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">approval channel (mvp)</div>
+                            <div className="mt-2 space-y-2">
+                              <label className="block">
+                                <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">provider</div>
+                                <input
+                                  value={approvalProvider}
+                                  onChange={(e) => {
+                                    const nextProvider = String(e.target.value || "").trim() || "telegram";
+                                    const nextMeta = { ...meta, approvalProvider: nextProvider };
+                                    const next: WorkflowFileV1 = { ...wf, meta: nextMeta };
+                                    setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                  }}
+                                  className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                  placeholder="telegram"
+                                />
+                              </label>
+
+                              <label className="block">
+                                <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">target</div>
+                                <input
+                                  value={approvalTarget}
+                                  onChange={(e) => {
+                                    const nextTarget = String(e.target.value || "").trim();
+                                    const nextMeta = { ...meta, approvalTarget: nextTarget };
+                                    const next: WorkflowFileV1 = { ...wf, meta: nextMeta };
+                                    setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                  }}
+                                  className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                  placeholder="(e.g. Telegram chat id)"
+                                />
+                                <div className="mt-1 text-[10px] text-[color:var(--ck-text-tertiary)]">
+                                  If set, sample runs that reach a human-approval node will send an approval packet via the gateway message tool.
+                                </div>
+                              </label>
+                            </div>
+                          </div>
 
                           <div>
                             <div className="flex items-center justify-between gap-2">
