@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type OrchestratorState =
   | {
@@ -27,21 +27,26 @@ type OrchestratorState =
 export function OrchestratorPanel({ teamId }: { teamId: string }) {
   const [loading, setLoading] = useState(true);
   const [state, setState] = useState<OrchestratorState | null>(null);
+  const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/teams/orchestrator?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" });
+      const json = (await res.json()) as OrchestratorState;
+      setState(json);
+      setLastLoadedAt(new Date().toISOString());
+    } catch (e: unknown) {
+      setState({ ok: false, error: e instanceof Error ? e.message : String(e) });
+      setLastLoadedAt(new Date().toISOString());
+    } finally {
+      setLoading(false);
+    }
+  }, [teamId]);
 
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/teams/orchestrator?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" });
-        const json = (await res.json()) as OrchestratorState;
-        setState(json);
-      } catch (e: unknown) {
-        setState({ ok: false, error: e instanceof Error ? e.message : String(e) });
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [teamId]);
+    void load();
+  }, [load]);
 
   if (loading) {
     return <div className="mt-6 ck-glass-strong p-4">Loading orchestrator state…</div>;
@@ -93,6 +98,24 @@ export function OrchestratorPanel({ teamId }: { teamId: string }) {
           <div className="mt-1 text-xs text-[color:var(--ck-text-secondary)]">
             Workspace: <span className="font-mono">{state.agent.workspace}</span>
           </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="text-xs text-[color:var(--ck-text-tertiary)]">
+            {lastLoadedAt ? (
+              <span>
+                Last updated: <span className="font-mono">{lastLoadedAt}</span>
+              </span>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-white/10 active:bg-white/15 disabled:opacity-50"
+          >
+            {loading ? "Refreshing…" : "Refresh"}
+          </button>
         </div>
       </div>
 
