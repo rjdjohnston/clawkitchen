@@ -158,6 +158,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [teamAgentsLoading, setTeamAgentsLoading] = useState(false);
 
   const workflowCanvasRef = useRef<HTMLDivElement | null>(null);
+  const workflowImportInputRef = useRef<HTMLInputElement | null>(null);
 
   const workflowParsed = useMemo(() => {
     const raw = String(workflowJsonText || "").trim();
@@ -1343,6 +1344,69 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                     JSON
                   </button>
                 </div>
+
+                <input
+                  ref={workflowImportInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    // Reset the input so re-importing the same file still triggers onChange.
+                    e.target.value = "";
+                    if (!file) return;
+
+                    setWorkflowFilesError("");
+                    try {
+                      const text = await file.text();
+                      const parsed = JSON.parse(text) as WorkflowFileV1;
+                      setWorkflowJsonText(JSON.stringify(parsed, null, 2) + "\n");
+                      setSelectedWorkflowFile("");
+                      flashMessage(`Imported workflow JSON: ${parsed.id || file.name}`, "success");
+                    } catch (err: unknown) {
+                      setWorkflowFilesError(err instanceof Error ? err.message : String(err));
+                    }
+                  }}
+                />
+
+                <button
+                  type="button"
+                  disabled={workflowSaving}
+                  onClick={() => workflowImportInputRef.current?.click()}
+                  className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-white/10 disabled:opacity-50"
+                >
+                  Import
+                </button>
+
+                <button
+                  type="button"
+                  disabled={workflowSaving || !workflowParsed || Boolean(workflowParseError)}
+                  onClick={() => {
+                    setWorkflowFilesError("");
+                    try {
+                      const wf = workflowParsed;
+                      if (!wf) throw new Error("No workflow loaded");
+                      if (workflowParseError) throw new Error(`Invalid JSON: ${workflowParseError}`);
+
+                      const filename = `${wf.id || "workflow"}.workflow.json`;
+                      const blob = new Blob([JSON.stringify(wf, null, 2) + "\n"], { type: "application/json" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = filename;
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      URL.revokeObjectURL(url);
+                      flashMessage(`Exported: ${filename}`, "success");
+                    } catch (err: unknown) {
+                      setWorkflowFilesError(err instanceof Error ? err.message : String(err));
+                    }
+                  }}
+                  className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-white/10 disabled:opacity-50"
+                >
+                  Export
+                </button>
 
                 <button
                   disabled={workflowSaving || !workflowParsed || Boolean(workflowParseError)}
