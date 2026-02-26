@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listWorkflows, readWorkflow, writeWorkflow } from "@/lib/workflows/storage";
+import { deleteWorkflow, listWorkflows, readWorkflow, writeWorkflow } from "@/lib/workflows/storage";
 import type { WorkflowFileV1 } from "@/lib/workflows/types";
 
 function errMessage(err: unknown) {
@@ -56,14 +56,29 @@ export async function POST(req: Request) {
 
   if (!teamId) return NextResponse.json({ ok: false, error: "teamId is required" }, { status: 400 });
   if (!isWorkflowFileV1(workflowRaw)) {
-    return NextResponse.json(
-      { ok: false, error: "workflow is required (must include id, name, nodes[], edges[])" },
-      { status: 400 }
-    );
+    return NextResponse.json({ ok: false, error: "workflow is required (must include id, name, nodes[], edges[])" }, { status: 400 });
   }
 
   try {
     const r = await writeWorkflow(teamId, workflowRaw);
+    const { ok, ...rest } = r;
+    void ok;
+    return NextResponse.json({ ok: true, ...rest });
+  } catch (err: unknown) {
+    return NextResponse.json({ ok: false, error: errMessage(err) }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const teamId = String(searchParams.get("teamId") ?? "").trim();
+  const id = String(searchParams.get("id") ?? "").trim();
+
+  if (!teamId) return NextResponse.json({ ok: false, error: "teamId is required" }, { status: 400 });
+  if (!id) return NextResponse.json({ ok: false, error: "id is required" }, { status: 400 });
+
+  try {
+    const r = await deleteWorkflow(teamId, id);
     const { ok, ...rest } = r;
     void ok;
     return NextResponse.json({ ok: true, ...rest });
