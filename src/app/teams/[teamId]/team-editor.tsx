@@ -1836,6 +1836,128 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                                       <div className="mt-1 text-[11px] text-[color:var(--ck-text-secondary)]">{String(run.summary)}</div>
                                     ) : null}
 
+                                    {(() => {
+                                      const status = String(run?.status ?? "");
+                                      const approvalVal = (run as Record<string, unknown>).approval;
+                                      const approval =
+                                        approvalVal && typeof approvalVal === "object" ? (approvalVal as Record<string, unknown>) : ({} as Record<string, unknown>);
+                                      const approvalState = String(approval.state ?? "");
+                                      const approvalNodeId = String(approval.nodeId ?? "");
+                                      const canAct = status === "waiting_for_approval" && approvalState === "pending" && approvalNodeId;
+
+                                      if (!canAct) return null;
+
+                                      return (
+                                        <div className="mt-2 rounded-[var(--ck-radius-sm)] border border-amber-300/30 bg-amber-500/10 p-2">
+                                          <div className="text-[10px] uppercase tracking-wide text-amber-100">approval required</div>
+                                          <div className="mt-1 text-[11px] text-amber-50">
+                                            Waiting on <span className="font-mono">{approvalNodeId}</span>
+                                          </div>
+                                          <div className="mt-2 flex flex-wrap gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={async () => {
+                                                const wfId = String(wf.id ?? "").trim();
+                                                const rId = String((run as Record<string, unknown>).id ?? "").trim();
+                                                if (!wfId || !rId) return;
+                                                setWorkflowRunsError("");
+                                                try {
+                                                  const res = await fetch("/api/teams/workflow-runs", {
+                                                    method: "POST",
+                                                    headers: { "content-type": "application/json" },
+                                                    body: JSON.stringify({ teamId, workflowId: wfId, runId: rId, action: "approve" }),
+                                                  });
+                                                  const json = await res.json();
+                                                  if (!res.ok || !json.ok) throw new Error(json.error || "Failed to approve");
+
+                                                  const detailRes = await fetch(
+                                                    `/api/teams/workflow-runs?teamId=${encodeURIComponent(teamId)}&workflowId=${encodeURIComponent(wfId)}&runId=${encodeURIComponent(rId)}`,
+                                                    { cache: "no-store" }
+                                                  );
+                                                  const detailJson = await detailRes.json();
+                                                  if (!detailRes.ok || !detailJson.ok) throw new Error(detailJson.error || "Failed to reload run");
+                                                  setSelectedWorkflowRun(detailJson.run);
+                                                  flashMessage("Approved", "success");
+                                                } catch (e: unknown) {
+                                                  setWorkflowRunsError(e instanceof Error ? e.message : String(e));
+                                                }
+                                              }}
+                                              className="rounded-[var(--ck-radius-sm)] border border-emerald-300/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-50 hover:bg-emerald-500/20"
+                                            >
+                                              Approve &amp; continue
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={async () => {
+                                                const wfId = String(wf.id ?? "").trim();
+                                                const rId = String((run as Record<string, unknown>).id ?? "").trim();
+                                                if (!wfId || !rId) return;
+                                                setWorkflowRunsError("");
+                                                try {
+                                                  const res = await fetch("/api/teams/workflow-runs", {
+                                                    method: "POST",
+                                                    headers: { "content-type": "application/json" },
+                                                    body: JSON.stringify({ teamId, workflowId: wfId, runId: rId, action: "request_changes" }),
+                                                  });
+                                                  const json = await res.json();
+                                                  if (!res.ok || !json.ok) throw new Error(json.error || "Failed to request changes");
+
+                                                  const detailRes = await fetch(
+                                                    `/api/teams/workflow-runs?teamId=${encodeURIComponent(teamId)}&workflowId=${encodeURIComponent(wfId)}&runId=${encodeURIComponent(rId)}`,
+                                                    { cache: "no-store" }
+                                                  );
+                                                  const detailJson = await detailRes.json();
+                                                  if (!detailRes.ok || !detailJson.ok) throw new Error(detailJson.error || "Failed to reload run");
+                                                  setSelectedWorkflowRun(detailJson.run);
+                                                  flashMessage("Requested changes", "success");
+                                                } catch (e: unknown) {
+                                                  setWorkflowRunsError(e instanceof Error ? e.message : String(e));
+                                                }
+                                              }}
+                                              className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+                                            >
+                                              Request changes
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={async () => {
+                                                const wfId = String(wf.id ?? "").trim();
+                                                const rId = String((run as Record<string, unknown>).id ?? "").trim();
+                                                if (!wfId || !rId) return;
+                                                setWorkflowRunsError("");
+                                                try {
+                                                  const res = await fetch("/api/teams/workflow-runs", {
+                                                    method: "POST",
+                                                    headers: { "content-type": "application/json" },
+                                                    body: JSON.stringify({ teamId, workflowId: wfId, runId: rId, action: "cancel" }),
+                                                  });
+                                                  const json = await res.json();
+                                                  if (!res.ok || !json.ok) throw new Error(json.error || "Failed to cancel");
+
+                                                  const detailRes = await fetch(
+                                                    `/api/teams/workflow-runs?teamId=${encodeURIComponent(teamId)}&workflowId=${encodeURIComponent(wfId)}&runId=${encodeURIComponent(rId)}`,
+                                                    { cache: "no-store" }
+                                                  );
+                                                  const detailJson = await detailRes.json();
+                                                  if (!detailRes.ok || !detailJson.ok) throw new Error(detailJson.error || "Failed to reload run");
+                                                  setSelectedWorkflowRun(detailJson.run);
+                                                  flashMessage("Canceled", "success");
+                                                } catch (e: unknown) {
+                                                  setWorkflowRunsError(e instanceof Error ? e.message : String(e));
+                                                }
+                                              }}
+                                              className="rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-50 hover:bg-red-500/20"
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
+                                          <div className="mt-2 text-[10px] text-amber-100/80">
+                                            Note: this is currently an in-app approval stub; channel delivery/resume wiring still TBD.
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
+
                                     <div className="mt-2">
                                       <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">per-node results</div>
                                       {nodes.length ? (
@@ -1848,7 +1970,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                                                 ? "text-emerald-200"
                                                 : status === "error"
                                                   ? "text-red-200"
-                                                  : status === "running"
+                                                  : status === "running" || status === "waiting"
                                                     ? "text-amber-200"
                                                     : "text-[color:var(--ck-text-secondary)]";
                                             const nodeId = String(node.nodeId ?? "");

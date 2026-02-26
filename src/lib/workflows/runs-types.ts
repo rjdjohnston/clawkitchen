@@ -1,10 +1,19 @@
 export type WorkflowRunNodeResultV1 = {
   nodeId: string;
-  status: "pending" | "running" | "success" | "error" | "skipped";
+  status: "pending" | "running" | "waiting" | "success" | "error" | "skipped";
   startedAt?: string;
   endedAt?: string;
   output?: unknown;
   error?: { message: string; stack?: string } | string;
+};
+
+export type WorkflowRunApprovalV1 = {
+  nodeId: string;
+  state: "pending" | "approved" | "changes_requested" | "canceled";
+  requestedAt?: string;
+  decidedAt?: string;
+  /** Freeform notes from the approver (optional) */
+  note?: string;
 };
 
 export type WorkflowRunFileV1 = {
@@ -14,9 +23,10 @@ export type WorkflowRunFileV1 = {
   teamId?: string;
   startedAt: string;
   endedAt?: string;
-  status: "running" | "success" | "error" | "canceled";
+  status: "running" | "waiting_for_approval" | "success" | "error" | "canceled";
   /** Optional high-level summary */
   summary?: string;
   nodes?: WorkflowRunNodeResultV1[];
+  approval?: WorkflowRunApprovalV1;
   meta?: Record<string, unknown>;
 };
