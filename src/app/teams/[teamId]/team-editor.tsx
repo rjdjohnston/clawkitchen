@@ -1679,7 +1679,11 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                 <div className="lg:col-span-3">
                   <div
                     ref={workflowCanvasRef}
-                    className="relative h-[55vh] w-full overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20"
+                    className={
+                      workflowEditorOpen
+                        ? "relative h-[calc(100vh-12rem)] w-full overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20"
+                        : "relative h-[55vh] w-full overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20"
+                    }
                   >
                     <div className="relative h-[900px] w-[1400px]">
                       <svg className="absolute inset-0" width={1400} height={900}>
