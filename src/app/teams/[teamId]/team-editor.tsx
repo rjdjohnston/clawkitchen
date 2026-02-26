@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { parse as parseYaml } from "yaml";
 import { useRouter } from "next/navigation";
 import { DeleteTeamModal } from "./DeleteTeamModal";
@@ -144,9 +144,68 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [selectedWorkflowFile, setSelectedWorkflowFile] = useState<string>("");
   const [workflowJsonText, setWorkflowJsonText] = useState<string>("");
   const [workflowSaving, setWorkflowSaving] = useState(false);
+  const [workflowView, setWorkflowView] = useState<"canvas" | "json">("canvas");
+  const [workflowSelectedNodeId, setWorkflowSelectedNodeId] = useState<string>("");
+  const [workflowDragging, setWorkflowDragging] = useState<null | { nodeId: string; dx: number; dy: number; containerLeft: number; containerTop: number }>(null);
 
   const [teamAgents, setTeamAgents] = useState<Array<{ id: string; identityName?: string }>>([]);
   const [teamAgentsLoading, setTeamAgentsLoading] = useState(false);
+
+  const workflowCanvasRef = useRef<HTMLDivElement | null>(null);
+
+  const workflowParsed = useMemo(() => {
+    const raw = String(workflowJsonText || "").trim();
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as WorkflowFileV1;
+    } catch {
+      return null;
+    }
+  }, [workflowJsonText]);
+
+  const workflowParseError = useMemo(() => {
+    const raw = String(workflowJsonText || "").trim();
+    if (!raw) return "";
+    try {
+      JSON.parse(raw);
+      return "";
+    } catch (e: unknown) {
+      return e instanceof Error ? e.message : "Invalid JSON";
+    }
+  }, [workflowJsonText]);
+
+  useEffect(() => {
+    if (!workflowDragging) return;
+
+    function onMove(e: PointerEvent) {
+      if (!workflowDragging) return;
+      const wf = workflowParsed;
+      if (!wf) return;
+
+      const node = wf.nodes.find((n) => n.id === workflowDragging.nodeId);
+      if (!node) return;
+
+      const x = Math.max(0, Math.round(e.clientX - workflowDragging.containerLeft - workflowDragging.dx));
+      const y = Math.max(0, Math.round(e.clientY - workflowDragging.containerTop - workflowDragging.dy));
+
+      const next: WorkflowFileV1 = {
+        ...wf,
+        nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, x, y } : n)),
+      };
+      setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+    }
+
+    function onUp() {
+      setWorkflowDragging(null);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [workflowDragging, workflowParsed]);
 
   const recipeAgents = useMemo(() => {
     const md = String(content ?? "");
@@ -1080,17 +1139,17 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                         { kind: "cron", id: "weekly-recap", name: "Weekly recap", enabled: false, expr: "30 9 * * 1", tz: "America/New_York" },
                       ],
                       nodes: [
-                        { id: "start", type: "start", name: "Start" },
-                        { id: "research", type: "llm", name: "Research" },
-                        { id: "draft_assets", type: "llm", name: "Draft assets" },
-                        { id: "qc_brand", type: "llm", name: "QC brand" },
-                        { id: "approval", type: "human_approval", name: "Approval" },
-                        { id: "post_x", type: "tool", name: "Post: X" },
-                        { id: "post_instagram", type: "tool", name: "Post: Instagram" },
-                        { id: "post_tiktok", type: "tool", name: "Post: TikTok" },
-                        { id: "post_youtube", type: "tool", name: "Post: YouTube" },
-                        { id: "writeback", type: "tool", name: "Writeback" },
-                        { id: "end", type: "end", name: "End" },
+                        { id: "start", type: "start", name: "Start", x: 80, y: 80 },
+                        { id: "research", type: "llm", name: "Research", x: 320, y: 80 },
+                        { id: "draft_assets", type: "llm", name: "Draft assets", x: 560, y: 80 },
+                        { id: "qc_brand", type: "llm", name: "QC brand", x: 800, y: 80 },
+                        { id: "approval", type: "human_approval", name: "Approval", x: 1040, y: 80 },
+                        { id: "post_x", type: "tool", name: "Post: X", x: 1040, y: 240 },
+                        { id: "post_instagram", type: "tool", name: "Post: Instagram", x: 1040, y: 360 },
+                        { id: "post_tiktok", type: "tool", name: "Post: TikTok", x: 1040, y: 480 },
+                        { id: "post_youtube", type: "tool", name: "Post: YouTube", x: 1040, y: 600 },
+                        { id: "writeback", type: "tool", name: "Writeback", x: 800, y: 600 },
+                        { id: "end", type: "end", name: "End", x: 560, y: 600 },
                       ],
                       edges: [
                         { id: "e1", from: "start", to: "research" },
@@ -1208,51 +1267,274 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
           </div>
 
           <div className="ck-glass-strong p-4 lg:col-span-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Edit JSON</div>
-              <button
-                disabled={workflowSaving}
-                onClick={async () => {
-                  setWorkflowSaving(true);
-                  setWorkflowFilesError("");
-                  try {
-                    const parsed = JSON.parse(workflowJsonText || "{}") as WorkflowFileV1;
-                    const res = await fetch("/api/teams/workflows", {
-                      method: "POST",
-                      headers: { "content-type": "application/json" },
-                      body: JSON.stringify({ teamId, workflow: parsed }),
-                    });
-                    const json = await res.json();
-                    if (!res.ok || !json.ok) throw new Error(json.error || "Failed to save workflow");
-                    flashMessage(`Saved workflow: ${parsed.id}`, "success");
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Workflow editor</div>
 
-                    const listRes = await fetch(`/api/teams/workflows?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" });
-                    const listJson = await listRes.json();
-                    if (listRes.ok && listJson.ok) {
-                      const files = Array.isArray(listJson.files) ? listJson.files : [];
-                      const list = files.map((f: unknown) => String(f ?? "").trim()).filter((f: string) => Boolean(f));
-                      setWorkflowFiles(list);
-                      setSelectedWorkflowFile(`${parsed.id}.workflow.json`);
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex overflow-hidden rounded-[var(--ck-radius-sm)] border border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setWorkflowView("canvas")}
+                    className={
+                      workflowView === "canvas"
+                        ? "bg-white/10 px-3 py-2 text-xs font-medium text-[color:var(--ck-text-primary)]"
+                        : "bg-transparent px-3 py-2 text-xs font-medium text-[color:var(--ck-text-secondary)] hover:bg-white/5"
                     }
-                  } catch (e: unknown) {
-                    setWorkflowFilesError(e instanceof Error ? e.message : String(e));
-                  } finally {
-                    setWorkflowSaving(false);
-                  }
-                }}
-                className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
-              >
-                {workflowSaving ? "Saving…" : "Save"}
-              </button>
+                  >
+                    Canvas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWorkflowView("json")}
+                    className={
+                      workflowView === "json"
+                        ? "bg-white/10 px-3 py-2 text-xs font-medium text-[color:var(--ck-text-primary)]"
+                        : "bg-transparent px-3 py-2 text-xs font-medium text-[color:var(--ck-text-secondary)] hover:bg-white/5"
+                    }
+                  >
+                    JSON
+                  </button>
+                </div>
+
+                <button
+                  disabled={workflowSaving || !workflowParsed || Boolean(workflowParseError)}
+                  onClick={async () => {
+                    setWorkflowSaving(true);
+                    setWorkflowFilesError("");
+                    try {
+                      const wf = workflowParsed;
+                      if (!wf) throw new Error("No workflow loaded");
+                      if (workflowParseError) throw new Error(`Invalid JSON: ${workflowParseError}`);
+
+                      const res = await fetch("/api/teams/workflows", {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ teamId, workflow: wf }),
+                      });
+                      const json = await res.json();
+                      if (!res.ok || !json.ok) throw new Error(json.error || "Failed to save workflow");
+                      flashMessage(`Saved workflow: ${wf.id}`, "success");
+
+                      const listRes = await fetch(`/api/teams/workflows?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" });
+                      const listJson = await listRes.json();
+                      if (listRes.ok && listJson.ok) {
+                        const files = Array.isArray(listJson.files) ? listJson.files : [];
+                        const list = files.map((f: unknown) => String(f ?? "").trim()).filter((f: string) => Boolean(f));
+                        setWorkflowFiles(list);
+                        setSelectedWorkflowFile(`${wf.id}.workflow.json`);
+                      }
+                    } catch (e: unknown) {
+                      setWorkflowFilesError(e instanceof Error ? e.message : String(e));
+                    } finally {
+                      setWorkflowSaving(false);
+                    }
+                  }}
+                  className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
+                >
+                  {workflowSaving ? "Saving…" : "Save"}
+                </button>
+              </div>
             </div>
 
-            <textarea
-              value={workflowJsonText}
-              onChange={(e) => setWorkflowJsonText(e.target.value)}
-              className="mt-3 h-[55vh] w-full resize-none rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-3 font-mono text-xs text-[color:var(--ck-text-primary)]"
-              spellCheck={false}
-              placeholder="Select a workflow from the left (or create the template)."
-            />
+            {workflowParseError ? (
+              <div className="mt-3 rounded-[var(--ck-radius-sm)] border border-yellow-400/30 bg-yellow-500/10 p-3 text-sm text-yellow-100">
+                JSON parse error: {workflowParseError}
+              </div>
+            ) : null}
+
+            {workflowView === "canvas" ? (
+              <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-4">
+                <div className="lg:col-span-3">
+                  <div
+                    ref={workflowCanvasRef}
+                    className="relative h-[55vh] w-full overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20"
+                  >
+                    <div className="relative h-[900px] w-[1400px]">
+                      <svg className="absolute inset-0" width={1400} height={900}>
+                        {(workflowParsed?.edges ?? []).map((e) => {
+                          const wf = workflowParsed;
+                          if (!wf) return null;
+                          const a = wf.nodes.find((n) => n.id === e.from);
+                          const b = wf.nodes.find((n) => n.id === e.to);
+                          if (!a || !b) return null;
+
+                          const ax = (typeof a.x === "number" ? a.x : 80) + 90;
+                          const ay = (typeof a.y === "number" ? a.y : 80) + 24;
+                          const bx = (typeof b.x === "number" ? b.x : 80) + 90;
+                          const by = (typeof b.y === "number" ? b.y : 80) + 24;
+
+                          return (
+                            <g key={e.id}>
+                              <line x1={ax} y1={ay} x2={bx} y2={by} stroke="rgba(255,255,255,0.18)" strokeWidth={2} />
+                              {e.label ? (
+                                <text x={(ax + bx) / 2} y={(ay + by) / 2 - 6} fill="rgba(255,255,255,0.55)" fontSize={10} textAnchor="middle">
+                                  {e.label}
+                                </text>
+                              ) : null}
+                            </g>
+                          );
+                        })}
+                      </svg>
+
+                      {(workflowParsed?.nodes ?? []).map((n, idx) => {
+                        const x = typeof n.x === "number" ? n.x : 80 + idx * 220;
+                        const y = typeof n.y === "number" ? n.y : 80;
+                        const selected = workflowSelectedNodeId === n.id;
+
+                        return (
+                          <div
+                            key={n.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setWorkflowSelectedNodeId(n.id)}
+                            onPointerDown={(e) => {
+                              if (e.button !== 0) return;
+                              const el = workflowCanvasRef.current;
+                              if (!el) return;
+                              const rect = el.getBoundingClientRect();
+                              const dx = e.clientX - rect.left - x;
+                              const dy = e.clientY - rect.top - y;
+                              setWorkflowSelectedNodeId(n.id);
+                              setWorkflowDragging({ nodeId: n.id, dx, dy, containerLeft: rect.left, containerTop: rect.top });
+                            }}
+                            className={
+                              selected
+                                ? "absolute cursor-grab rounded-[var(--ck-radius-sm)] border border-white/25 bg-white/10 px-3 py-2 text-xs text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)]"
+                                : "absolute cursor-grab rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                            }
+                            style={{ left: x, top: y, width: 180 }}
+                          >
+                            <div className="font-medium text-[color:var(--ck-text-primary)]">{n.name || n.id}</div>
+                            <div className="mt-0.5 text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">{n.type}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
+                    Tip: click a node to inspect it; drag to reposition. Positions are stored in the workflow JSON (file-first).
+                  </div>
+                </div>
+
+                <div className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3 lg:col-span-1">
+                  <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Inspector</div>
+                  {workflowParsed && workflowSelectedNodeId ? (
+                    (() => {
+                      const wf = workflowParsed;
+                      const node = wf.nodes.find((n) => n.id === workflowSelectedNodeId);
+                      if (!node) {
+                        return <div className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">No node selected.</div>;
+                      }
+
+                      return (
+                        <div className="mt-3 space-y-3">
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">id</div>
+                            <div className="mt-1 rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]">
+                              {node.id}
+                            </div>
+                          </div>
+
+                          <label className="block">
+                            <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">name</div>
+                            <input
+                              value={String(node.name ?? "")}
+                              onChange={(e) => {
+                                const nextName = e.target.value;
+                                const next: WorkflowFileV1 = {
+                                  ...wf,
+                                  nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, name: nextName } : n)),
+                                };
+                                setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                              }}
+                              className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                              placeholder="Optional"
+                            />
+                          </label>
+
+                          <label className="block">
+                            <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">type</div>
+                            <select
+                              value={node.type}
+                              onChange={(e) => {
+                                const nextType = e.target.value as WorkflowFileV1["nodes"][number]["type"];
+                                const next: WorkflowFileV1 = {
+                                  ...wf,
+                                  nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, type: nextType } : n)),
+                                };
+                                setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                              }}
+                              className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                            >
+                              <option value="start">start</option>
+                              <option value="end">end</option>
+                              <option value="llm">llm</option>
+                              <option value="tool">tool</option>
+                              <option value="condition">condition</option>
+                              <option value="delay">delay</option>
+                              <option value="human_approval">human_approval</option>
+                            </select>
+                          </label>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="block">
+                              <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">x</div>
+                              <input
+                                type="number"
+                                value={typeof node.x === "number" ? node.x : 0}
+                                onChange={(e) => {
+                                  const nextX = Number(e.target.value);
+                                  const next: WorkflowFileV1 = {
+                                    ...wf,
+                                    nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, x: nextX } : n)),
+                                  };
+                                  setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                }}
+                                className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                              />
+                            </label>
+                            <label className="block">
+                              <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">y</div>
+                              <input
+                                type="number"
+                                value={typeof node.y === "number" ? node.y : 0}
+                                onChange={(e) => {
+                                  const nextY = Number(e.target.value);
+                                  const next: WorkflowFileV1 = {
+                                    ...wf,
+                                    nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, y: nextY } : n)),
+                                  };
+                                  setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                }}
+                                className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                              />
+                            </label>
+                          </div>
+
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">config</div>
+                            <pre className="mt-1 max-h-[200px] overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2 text-[10px] text-[color:var(--ck-text-secondary)]">
+                              {JSON.stringify(node.config ?? {}, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <div className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">Select a node.</div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <textarea
+                value={workflowJsonText}
+                onChange={(e) => setWorkflowJsonText(e.target.value)}
+                className="mt-3 h-[55vh] w-full resize-none rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-3 font-mono text-xs text-[color:var(--ck-text-primary)]"
+                spellCheck={false}
+                placeholder="Select a workflow from the left (or create the template)."
+              />
+            )}
           </div>
         </div>
       ) : null}
