@@ -1407,8 +1407,8 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                         <span
                           className={
                             isActive
-                              ? "truncate text-sm text-[color:var(--ck-text-primary)]"
-                              : "truncate text-sm text-[color:var(--ck-text-secondary)]"
+                              ? "truncate text-base font-medium text-[color:var(--ck-text-primary)]"
+                              : "truncate text-base text-[color:var(--ck-text-secondary)]"
                           }
                         >
                           {f}
@@ -1439,7 +1439,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                               setWorkflowSaving(false);
                             }
                           }}
-                          className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10 disabled:opacity-50"
+                          className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-white/10 disabled:opacity-50"
                         >
                           Edit
                         </button>
@@ -1480,7 +1480,7 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                               setWorkflowSaving(false);
                             }
                           }}
-                          className="rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-100 hover:bg-red-500/20 disabled:opacity-50"
+                          className="rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-100 shadow-[var(--ck-shadow-1)] hover:bg-red-500/20 disabled:opacity-50"
                         >
                           Delete
                         </button>
