@@ -3,6 +3,8 @@ import crypto from "node:crypto";
 import { listWorkflowRuns, readWorkflowRun, writeWorkflowRun } from "@/lib/workflows/runs-storage";
 import type { WorkflowRunFileV1, WorkflowRunNodeResultV1 } from "@/lib/workflows/runs-types";
 import { readWorkflow } from "@/lib/workflows/storage";
+import type { WorkflowFileV1 } from "@/lib/workflows/types";
+import { toolsInvoke } from "@/lib/gateway";
 
 function errMessage(err: unknown) {
   return err instanceof Error ? err.message : String(err);
@@ -10,6 +12,83 @@ function errMessage(err: unknown) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return Boolean(v) && typeof v === "object" && !Array.isArray(v);
+}
+
+function formatApprovalPacketMessage(workflow: WorkflowFileV1, run: WorkflowRunFileV1, approvalNodeId: string): string {
+  const title = `${workflow.name || workflow.id} — Approval needed`;
+  const runLine = `Run: ${run.id}`;
+
+  const approvalNode = Array.isArray(run.nodes) ? run.nodes.find((n) => n.nodeId === approvalNodeId) : undefined;
+  const out = isRecord(approvalNode?.output) ? approvalNode.output : {};
+  const packet = isRecord(out.packet) ? out.packet : null;
+  const platforms = packet && isRecord(packet.platforms) ? (packet.platforms as Record<string, unknown>) : null;
+
+  let body = `${title}\n${runLine}\n\n`;
+
+  if (packet && typeof packet.note === "string" && packet.note.trim()) {
+    body += `${packet.note.trim()}\n\n`;
+  }
+
+  if (platforms) {
+    body += "Drafts:\n";
+    for (const [k, v] of Object.entries(platforms)) {
+      if (!v) continue;
+      const p = isRecord(v) ? v : { value: v };
+      const hook = typeof p.hook === "string" ? p.hook.trim() : "";
+      const text = typeof p.body === "string" ? p.body.trim() : "";
+      const script = typeof p.script === "string" ? p.script.trim() : "";
+      const notes = typeof p.assetNotes === "string" ? p.assetNotes.trim() : "";
+
+      body += `\n— ${k.toUpperCase()} —\n`;
+      if (hook) body += `Hook: ${hook}\n`;
+      if (text) body += `Body: ${text}\n`;
+      if (script) body += `Script: ${script}\n`;
+      if (notes) body += `Notes: ${notes}\n`;
+    }
+    body += "\n";
+  } else {
+    body += "(No structured approval packet found in run file.)\n\n";
+  }
+
+  body += "Reply in ClawKitchen: Approve / Request changes / Cancel.";
+  return body;
+}
+
+async function maybeSendApprovalRequest({
+  teamId,
+  workflow,
+  run,
+  approvalNodeId,
+}: {
+  teamId: string;
+  workflow: WorkflowFileV1;
+  run: WorkflowRunFileV1;
+  approvalNodeId: string;
+}) {
+  const meta = isRecord(workflow.meta) ? workflow.meta : {};
+  const provider = String(meta.approvalProvider ?? "telegram").trim() || "telegram";
+  const target = String(meta.approvalTarget ?? "").trim();
+  if (!target) return;
+
+  const message = formatApprovalPacketMessage(workflow, run, approvalNodeId);
+
+  // Best-effort: message delivery failures should not block file-first persistence.
+  await toolsInvoke({
+    tool: "message",
+    args: {
+      action: "send",
+      channel: provider,
+      target,
+      message,
+    },
+  });
+
+  // Writeback of delivery info happens in the caller (so we can record errors too).
+  void teamId;
 }
 
 export async function GET(req: Request) {
@@ -289,7 +368,7 @@ export async function POST(req: Request) {
 
             const status: WorkflowRunFileV1["status"] = approvalNodeId ? "waiting_for_approval" : "success";
 
-            return {
+            const baseRun: WorkflowRunFileV1 = {
               schema: "clawkitchen.workflow-run.v1",
               id: runId,
               workflowId,
@@ -307,7 +386,30 @@ export async function POST(req: Request) {
                     requestedAt: new Date(t0 + approvalIdx * 350).toISOString(),
                   }
                 : undefined,
-            } satisfies WorkflowRunFileV1;
+            };
+
+            if (approvalNodeId) {
+              const meta = isRecord(wf.meta) ? wf.meta : {};
+              const provider = String(meta.approvalProvider ?? "telegram").trim() || "telegram";
+              const target = String(meta.approvalTarget ?? "").trim();
+
+              if (target) {
+                try {
+                  await maybeSendApprovalRequest({ teamId, workflow: wf, run: baseRun, approvalNodeId });
+                  baseRun.approval = {
+                    ...baseRun.approval,
+                    outbound: { provider, target, sentAt: nowIso() },
+                  } as WorkflowRunFileV1["approval"];
+                } catch (e: unknown) {
+                  baseRun.approval = {
+                    ...baseRun.approval,
+                    outbound: { provider, target, error: errMessage(e), attemptedAt: nowIso() },
+                  } as WorkflowRunFileV1["approval"];
+                }
+              }
+            }
+
+            return baseRun satisfies WorkflowRunFileV1;
           })()
         : {
             schema: "clawkitchen.workflow-run.v1",
