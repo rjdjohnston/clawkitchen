@@ -24,12 +24,14 @@ export async function GET(req: Request) {
   try {
     if (runId) {
       const r = await readWorkflowRun(teamId, workflowId, runId);
-      const { ok: _ok, ...rest } = r;
+      const { ok, ...rest } = r;
+      void ok;
       return NextResponse.json({ ok: true, ...rest });
     }
 
     const r = await listWorkflowRuns(teamId, workflowId);
-    const { ok: _ok, ...rest } = r;
+    const { ok, ...rest } = r;
+    void ok;
     return NextResponse.json({ ok: true, ...rest });
   } catch (err: unknown) {
     return NextResponse.json({ ok: false, error: errMessage(err) }, { status: 500 });
@@ -130,7 +132,8 @@ export async function POST(req: Request) {
           };
 
     const r = await writeWorkflowRun(teamId, workflowId, run);
-    const { ok: _ok, ...rest } = r;
+    const { ok, ...rest } = r;
+    void ok;
     return NextResponse.json({ ok: true, runId, ...rest });
   } catch (err: unknown) {
     return NextResponse.json({ ok: false, error: errMessage(err) }, { status: 500 });
