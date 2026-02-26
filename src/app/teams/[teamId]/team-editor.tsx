@@ -148,6 +148,14 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [workflowSelectedNodeId, setWorkflowSelectedNodeId] = useState<string>("");
   const [workflowDragging, setWorkflowDragging] = useState<null | { nodeId: string; dx: number; dy: number; containerLeft: number; containerTop: number }>(null);
 
+  // Canvas editor helpers (minimal MVP): add/remove nodes + edges via inspector forms.
+  const [workflowNewNodeId, setWorkflowNewNodeId] = useState<string>("");
+  const [workflowNewNodeName, setWorkflowNewNodeName] = useState<string>("");
+  const [workflowNewNodeType, setWorkflowNewNodeType] = useState<WorkflowFileV1["nodes"][number]["type"]>("llm");
+  const [workflowNewEdgeFrom, setWorkflowNewEdgeFrom] = useState<string>("");
+  const [workflowNewEdgeTo, setWorkflowNewEdgeTo] = useState<string>("");
+  const [workflowNewEdgeLabel, setWorkflowNewEdgeLabel] = useState<string>("");
+
   const [workflowRuns, setWorkflowRuns] = useState<string[]>([]);
   const [workflowRunsLoading, setWorkflowRunsLoading] = useState(false);
   const [workflowRunsError, setWorkflowRunsError] = useState<string>("");
@@ -2020,7 +2028,232 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
                           </div>
 
                           <div className="border-t border-white/10 pt-3">
-                            <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Node inspector</div>
+                            <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Nodes</div>
+
+                            <div className="mt-2 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
+                              <div className="grid grid-cols-1 gap-2">
+                                <label className="block">
+                                  <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">id</div>
+                                  <input
+                                    value={workflowNewNodeId}
+                                    onChange={(e) => setWorkflowNewNodeId(e.target.value)}
+                                    className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                    placeholder="e.g. draft_assets"
+                                  />
+                                  <div className="mt-1 text-[10px] text-[color:var(--ck-text-tertiary)]">
+                                    Tip: ids are file-first + portable; use lowercase letters, numbers, and underscores.
+                                  </div>
+                                </label>
+
+                                <label className="block">
+                                  <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">name (optional)</div>
+                                  <input
+                                    value={workflowNewNodeName}
+                                    onChange={(e) => setWorkflowNewNodeName(e.target.value)}
+                                    className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                    placeholder="Human-friendly label"
+                                  />
+                                </label>
+
+                                <label className="block">
+                                  <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">type</div>
+                                  <select
+                                    value={workflowNewNodeType}
+                                    onChange={(e) => setWorkflowNewNodeType(e.target.value as WorkflowFileV1["nodes"][number]["type"])}
+                                    className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                  >
+                                    <option value="start">start</option>
+                                    <option value="end">end</option>
+                                    <option value="llm">llm</option>
+                                    <option value="tool">tool</option>
+                                    <option value="condition">condition</option>
+                                    <option value="delay">delay</option>
+                                    <option value="human_approval">human_approval</option>
+                                  </select>
+                                </label>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const rawId = String(workflowNewNodeId || "").trim();
+                                    const id = rawId.replace(/[^a-z0-9_\-]/gi, "_");
+                                    if (!id) {
+                                      flashMessage("Node id is required", "error");
+                                      return;
+                                    }
+                                    if (wf.nodes.some((n) => n.id === id)) {
+                                      flashMessage(`Node id already exists: ${id}`, "error");
+                                      return;
+                                    }
+
+                                    const maxX = wf.nodes.reduce((acc, n) => (typeof n.x === "number" ? Math.max(acc, n.x) : acc), 80);
+                                    const nextNode = {
+                                      id,
+                                      type: workflowNewNodeType,
+                                      name: String(workflowNewNodeName || "").trim() || id,
+                                      x: maxX + 220,
+                                      y: 80,
+                                    } as WorkflowFileV1["nodes"][number];
+
+                                    const next: WorkflowFileV1 = { ...wf, nodes: [...wf.nodes, nextNode] };
+                                    setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                    setWorkflowSelectedNodeId(id);
+                                    setWorkflowNewNodeId("");
+                                    setWorkflowNewNodeName("");
+                                  }}
+                                  className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+                                >
+                                  + Add node
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="mt-2 space-y-1">
+                              {wf.nodes.map((n) => {
+                                const selected = workflowSelectedNodeId === n.id;
+                                return (
+                                  <button
+                                    key={n.id}
+                                    type="button"
+                                    onClick={() => setWorkflowSelectedNodeId(n.id)}
+                                    className={
+                                      selected
+                                        ? "w-full rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-left text-[11px] text-[color:var(--ck-text-primary)]"
+                                        : "w-full rounded-[var(--ck-radius-sm)] px-2 py-1 text-left text-[11px] text-[color:var(--ck-text-secondary)] hover:bg-white/5"
+                                    }
+                                  >
+                                    <span className="font-mono">{n.id}</span>
+                                    <span className="ml-2 text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">{n.type}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="border-t border-white/10 pt-3">
+                            <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Edges</div>
+
+                            <div className="mt-2 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
+                              <div className="grid grid-cols-1 gap-2">
+                                <label className="block">
+                                  <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">from</div>
+                                  <select
+                                    value={workflowNewEdgeFrom}
+                                    onChange={(e) => setWorkflowNewEdgeFrom(e.target.value)}
+                                    className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                  >
+                                    <option value="">(select)</option>
+                                    {wf.nodes.map((n) => (
+                                      <option key={n.id} value={n.id}>
+                                        {n.id}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="block">
+                                  <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">to</div>
+                                  <select
+                                    value={workflowNewEdgeTo}
+                                    onChange={(e) => setWorkflowNewEdgeTo(e.target.value)}
+                                    className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                  >
+                                    <option value="">(select)</option>
+                                    {wf.nodes.map((n) => (
+                                      <option key={n.id} value={n.id}>
+                                        {n.id}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="block">
+                                  <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">label (optional)</div>
+                                  <input
+                                    value={workflowNewEdgeLabel}
+                                    onChange={(e) => setWorkflowNewEdgeLabel(e.target.value)}
+                                    className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                    placeholder="e.g. approve"
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const from = String(workflowNewEdgeFrom || "").trim();
+                                    const to = String(workflowNewEdgeTo || "").trim();
+                                    if (!from || !to) {
+                                      flashMessage("Edge requires from + to", "error");
+                                      return;
+                                    }
+                                    if (from === to) {
+                                      flashMessage("Edge from/to must be different", "error");
+                                      return;
+                                    }
+                                    const id = `e${Date.now()}`;
+                                    const nextEdge: WorkflowFileV1["edges"][number] = {
+                                      id,
+                                      from,
+                                      to,
+                                      ...(String(workflowNewEdgeLabel || "").trim() ? { label: String(workflowNewEdgeLabel).trim() } : {}),
+                                    };
+                                    const next: WorkflowFileV1 = { ...wf, edges: [...(wf.edges ?? []), nextEdge] };
+                                    setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                    setWorkflowNewEdgeLabel("");
+                                  }}
+                                  className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+                                >
+                                  + Add edge
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="mt-2 space-y-2">
+                              {(wf.edges ?? []).length ? (
+                                (wf.edges ?? []).map((e) => (
+                                  <div key={e.id} className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="text-[11px] text-[color:var(--ck-text-secondary)]">
+                                        <span className="font-mono">{e.from}</span> → <span className="font-mono">{e.to}</span>
+                                        {e.label ? <span className="ml-2 text-[10px] text-[color:var(--ck-text-tertiary)]">({e.label})</span> : null}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const next: WorkflowFileV1 = { ...wf, edges: (wf.edges ?? []).filter((x) => x.id !== e.id) };
+                                          setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                        }}
+                                        className="text-[10px] text-[color:var(--ck-text-tertiary)] hover:text-[color:var(--ck-text-primary)]"
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="text-xs text-[color:var(--ck-text-secondary)]">No edges yet.</div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="border-t border-white/10 pt-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Node inspector</div>
+                              {workflowSelectedNodeId ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nodeId = workflowSelectedNodeId;
+                                    const nextNodes = wf.nodes.filter((n) => n.id !== nodeId);
+                                    const nextEdges = (wf.edges ?? []).filter((e) => e.from !== nodeId && e.to !== nodeId);
+                                    const next: WorkflowFileV1 = { ...wf, nodes: nextNodes, edges: nextEdges };
+                                    setWorkflowJsonText(JSON.stringify(next, null, 2) + "\n");
+                                    setWorkflowSelectedNodeId("");
+                                  }}
+                                  className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-red-100 hover:bg-white/10"
+                                >
+                                  Delete node
+                                </button>
+                              ) : null}
+                            </div>
+
                             {workflowSelectedNodeId ? (
                               (() => {
                                 const node = wf.nodes.find((n) => n.id === workflowSelectedNodeId);
