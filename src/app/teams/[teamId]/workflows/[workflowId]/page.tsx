@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { unstable_noStore as noStore } from "next/cache";
 import WorkflowsEditorClient from "./workflows-editor-client";
 
@@ -19,7 +20,14 @@ export default async function WorkflowEditorPage({
   const draft = Array.isArray(draftRaw) ? draftRaw[0] : draftRaw;
 
   return (
-    <div className="h-full w-full">
+    <div className="space-y-4 p-6">
+      <Link
+        href={`/teams/${encodeURIComponent(teamId)}?tab=workflows`}
+        className="text-sm font-medium hover:underline"
+      >
+        ← Back
+      </Link>
+
       <WorkflowsEditorClient teamId={teamId} workflowId={workflowId} draft={draft === "1"} />
     </div>
   );

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { WorkflowFileV1 } from "@/lib/workflows/types";
 import { validateWorkflowFileV1 } from "@/lib/workflows/validate";
@@ -73,6 +72,18 @@ export default function WorkflowsEditorClient({
     return validateWorkflowFileV1(parsed.wf);
   }, [parsed.wf]);
 
+  function setWorkflow(next: WorkflowFileV1) {
+    const text = JSON.stringify(next, null, 2) + "\n";
+    setStatus({ kind: "ready", jsonText: text });
+    if (draft) {
+      try {
+        sessionStorage.setItem(draftKey(teamId, workflowId), text);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   async function onSave() {
     if (status.kind !== "ready") return;
     if (!parsed.wf) return;
@@ -125,16 +136,7 @@ export default function WorkflowsEditorClient({
 
   return (
     <div className="ck-glass flex h-full min-h-0 w-full flex-col p-4">
-      <div className="flex items-center justify-between gap-3">
-        <Link
-          href={`/teams/${encodeURIComponent(teamId)}?tab=workflows`}
-          className="text-sm font-medium hover:underline"
-        >
-          ← Back
-        </Link>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-medium text-[color:var(--ck-text-primary)]">
             Workflow editor — {workflowId}.workflow.json
@@ -224,12 +226,12 @@ export default function WorkflowsEditorClient({
             {saving ? "Saving…" : "Save"}
           </button>
 
-          <Link
+          <a
             href={`/teams/${encodeURIComponent(teamId)}?tab=workflows`}
             className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
           >
             Workflows
-          </Link>
+          </a>
         </div>
       </div>
 
@@ -350,12 +352,240 @@ export default function WorkflowsEditorClient({
         )}
 
         <div className="w-[360px] shrink-0 overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3">
-          <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Selection</div>
-          {selectedNodeId && parsed.wf ? (
-            <div className="mt-2 text-xs text-[color:var(--ck-text-primary)]">Node: {selectedNodeId}</div>
-          ) : (
-            <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">Click a node to inspect.</div>
-          )}
+          <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Workflow</div>
+
+          {parsed.wf ? (
+            (() => {
+              const wf = parsed.wf;
+              const tz = String(wf.timezone ?? "").trim() || "UTC";
+              const triggers = wf.triggers ?? [];
+
+              const meta = wf.meta && typeof wf.meta === "object" && !Array.isArray(wf.meta) ? (wf.meta as Record<string, unknown>) : {};
+              const approvalProvider = String(meta.approvalProvider ?? "telegram").trim() || "telegram";
+              const approvalTarget = String(meta.approvalTarget ?? "").trim();
+
+              const presets = [
+                { label: "(no preset)", expr: "" },
+                { label: "Mon/Wed/Fri 09:00 local", expr: "0 9 * * 1,3,5" },
+                { label: "Daily 08:00 local", expr: "0 8 * * *" },
+                { label: "Mon 09:30 local", expr: "30 9 * * 1" },
+              ];
+
+              return (
+                <div className="mt-2 space-y-4">
+                  <label className="block">
+                    <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">timezone</div>
+                    <input
+                      value={tz}
+                      onChange={(e) => {
+                        const nextTz = String(e.target.value || "").trim() || "UTC";
+                        setWorkflow({ ...wf, timezone: nextTz });
+                      }}
+                      className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                      placeholder="America/New_York"
+                    />
+                  </label>
+
+                  <div className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
+                    <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">approval channel (mvp)</div>
+                    <div className="mt-2 space-y-2">
+                      <label className="block">
+                        <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">provider</div>
+                        <input
+                          value={approvalProvider}
+                          onChange={(e) => {
+                            const nextProvider = String(e.target.value || "").trim() || "telegram";
+                            setWorkflow({ ...wf, meta: { ...meta, approvalProvider: nextProvider } });
+                          }}
+                          className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                          placeholder="telegram"
+                        />
+                      </label>
+
+                      <label className="block">
+                        <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">target</div>
+                        <input
+                          value={approvalTarget}
+                          onChange={(e) => {
+                            const nextTarget = String(e.target.value || "").trim();
+                            setWorkflow({ ...wf, meta: { ...meta, approvalTarget: nextTarget } });
+                          }}
+                          className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                          placeholder="(e.g. Telegram chat id)"
+                        />
+                        <div className="mt-1 text-[10px] text-[color:var(--ck-text-tertiary)]">
+                          If set, runs that reach a human-approval node can send an approval packet via the gateway message tool.
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">triggers</div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const id = `t${Date.now()}`;
+                          setWorkflow({
+                            ...wf,
+                            triggers: [
+                              ...triggers,
+                              { kind: "cron", id, name: "New trigger", enabled: true, expr: "0 9 * * 1-5", tz },
+                            ],
+                          });
+                        }}
+                        className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+                      >
+                        + Add
+                      </button>
+                    </div>
+
+                    <div className="mt-2 space-y-2">
+                      {triggers.length ? (
+                        triggers.map((t, i) => {
+                          const kind = (t as { kind?: unknown }).kind;
+                          const isCron = kind === "cron";
+                          const id = String((t as { id?: unknown }).id ?? "");
+                          const name = String((t as { name?: unknown }).name ?? "");
+                          const enabled = Boolean((t as { enabled?: unknown }).enabled);
+                          const expr = String((t as { expr?: unknown }).expr ?? "");
+                          const trigTz = String((t as { tz?: unknown }).tz ?? tz);
+                          const cronFields = expr.trim().split(/\s+/).filter(Boolean);
+                          const cronLooksValid = !expr.trim() || cronFields.length === 5;
+
+                          return (
+                            <div key={`${id}-${i}`} className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-xs text-[color:var(--ck-text-primary)]">{name || id || `trigger-${i + 1}`}</div>
+                                <button
+                                  type="button"
+                                  onClick={() => setWorkflow({ ...wf, triggers: triggers.filter((_, idx) => idx !== i) })}
+                                  className="text-[10px] text-[color:var(--ck-text-tertiary)] hover:text-[color:var(--ck-text-primary)]"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+
+                              {!isCron ? (
+                                <div className="mt-1 text-xs text-[color:var(--ck-text-secondary)]">Unsupported trigger kind: {String(kind)}</div>
+                              ) : null}
+
+                              <div className="mt-2 grid grid-cols-1 gap-2">
+                                <label className="flex items-center gap-2 text-xs text-[color:var(--ck-text-secondary)]">
+                                  <input
+                                    type="checkbox"
+                                    checked={enabled}
+                                    onChange={(e) => {
+                                      const nextEnabled = e.target.checked;
+                                      setWorkflow({
+                                        ...wf,
+                                        triggers: triggers.map((x, idx) => (idx === i && x.kind === "cron" ? { ...x, enabled: nextEnabled } : x)),
+                                      });
+                                    }}
+                                  />
+                                  Enabled
+                                </label>
+
+                                <label className="block">
+                                  <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">name</div>
+                                  <input
+                                    value={name}
+                                    onChange={(e) => {
+                                      const nextName = e.target.value;
+                                      setWorkflow({
+                                        ...wf,
+                                        triggers: triggers.map((x, idx) => (idx === i && x.kind === "cron" ? { ...x, name: nextName } : x)),
+                                      });
+                                    }}
+                                    className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                    placeholder="Content cadence"
+                                  />
+                                </label>
+
+                                <label className="block">
+                                  <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">schedule (cron)</div>
+                                  <input
+                                    value={expr}
+                                    onChange={(e) => {
+                                      const nextExpr = e.target.value;
+                                      setWorkflow({
+                                        ...wf,
+                                        triggers: triggers.map((x, idx) => (idx === i && x.kind === "cron" ? { ...x, expr: nextExpr } : x)),
+                                      });
+                                    }}
+                                    className={
+                                      cronLooksValid
+                                        ? "mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 font-mono text-[11px] text-[color:var(--ck-text-primary)]"
+                                        : "mt-1 w-full rounded-[var(--ck-radius-sm)] border border-red-400/50 bg-black/25 px-2 py-1 font-mono text-[11px] text-[color:var(--ck-text-primary)]"
+                                    }
+                                    placeholder="0 9 * * 1,3,5"
+                                  />
+                                  {!cronLooksValid ? (
+                                    <div className="mt-1 text-[10px] text-red-200">
+                                      Cron should be 5 fields (min hour dom month dow). You entered {cronFields.length}.
+                                    </div>
+                                  ) : null}
+                                  <div className="mt-1 grid grid-cols-1 gap-1">
+                                    <select
+                                      value={presets.some((p) => p.expr === expr) ? expr : ""}
+                                      onChange={(e) => {
+                                        const nextExpr = e.target.value;
+                                        if (!nextExpr) return;
+                                        setWorkflow({
+                                          ...wf,
+                                          triggers: triggers.map((x, idx) => (idx === i && x.kind === "cron" ? { ...x, expr: nextExpr } : x)),
+                                        });
+                                      }}
+                                      className="w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-[11px] text-[color:var(--ck-text-secondary)]"
+                                    >
+                                      {presets.map((p) => (
+                                        <option key={p.label} value={p.expr}>
+                                          {p.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <div className="text-[10px] text-[color:var(--ck-text-tertiary)]">Presets set the cron; edit freely for advanced schedules.</div>
+                                  </div>
+                                </label>
+
+                                <label className="block">
+                                  <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">timezone override</div>
+                                  <input
+                                    value={trigTz}
+                                    onChange={(e) => {
+                                      const nextTz = String(e.target.value || "").trim() || tz;
+                                      setWorkflow({
+                                        ...wf,
+                                        triggers: triggers.map((x, idx) => (idx === i && x.kind === "cron" ? { ...x, tz: nextTz } : x)),
+                                      });
+                                    }}
+                                    className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                    placeholder={tz}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="text-xs text-[color:var(--ck-text-secondary)]">No triggers yet.</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="border-t border-white/10 pt-3">
+                    <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Selection</div>
+                    {selectedNodeId ? (
+                      <div className="mt-2 text-xs text-[color:var(--ck-text-primary)]">Node: {selectedNodeId}</div>
+                    ) : (
+                      <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">Click a node to inspect.</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()
+          ) : null}
         </div>
       </div>
     </div>
