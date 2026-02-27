@@ -124,7 +124,7 @@ export default function WorkflowsClient({ teamId }: { teamId: string }) {
                 <button
                   type="button"
                   onClick={() => void onDelete(w.id)}
-                  className="rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-100 hover:bg-red-500/15"
+                  className="rounded-[var(--ck-radius-sm)] border border-[color:rgba(255,59,48,0.45)] bg-[color:rgba(255,59,48,0.08)] px-3 py-1.5 text-sm font-medium text-[color:var(--ck-accent-red)] transition-colors hover:bg-[color:rgba(255,59,48,0.12)]"
                 >
                   Delete
                 </button>
