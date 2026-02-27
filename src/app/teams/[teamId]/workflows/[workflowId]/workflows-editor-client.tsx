@@ -66,6 +66,22 @@ export default function WorkflowsEditorClient({
             setStatus({ kind: "ready", jsonText: stored });
             return;
           }
+
+          // New workflow drafts should not hit the filesystem-backed API.
+          if (workflowId === "new") {
+            const empty: WorkflowFileV1 = {
+              schema: "clawkitchen.workflow.v1",
+              id: "new-workflow",
+              name: "New workflow",
+              nodes: [
+                { id: "start", type: "start", x: 80, y: 80 },
+                { id: "end", type: "end", x: 320, y: 80 },
+              ],
+              edges: [{ id: "e1", from: "start", to: "end" }],
+            };
+            setStatus({ kind: "ready", jsonText: JSON.stringify(empty, null, 2) + "\n" });
+            return;
+          }
         }
 
         const res = await fetch(
