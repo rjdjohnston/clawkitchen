@@ -48,7 +48,6 @@ export default function WorkflowsEditorClient({
   const [workflowRunsLoading, setWorkflowRunsLoading] = useState(false);
   const [workflowRunsError, setWorkflowRunsError] = useState("");
   const [selectedWorkflowRunId, setSelectedWorkflowRunId] = useState<string>("");
-  const [selectedWorkflowRun, setSelectedWorkflowRun] = useState<unknown>(null);
 
   const [newNodeId, setNewNodeId] = useState("");
   const [newNodeName, setNewNodeName] = useState("");
@@ -179,7 +178,7 @@ export default function WorkflowsEditorClient({
   if (status.kind === "error") return <div className="ck-glass w-full p-6">{status.error}</div>;
 
   return (
-    <div className="ck-glass flex h-full min-h-0 w-full flex-col p-4">
+    <div className="ck-glass flex h-full min-h-0 w-full flex-1 flex-col p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-medium text-[color:var(--ck-text-primary)]">
@@ -979,7 +978,6 @@ export default function WorkflowsEditorClient({
                                 const wfId = String(wf.id ?? "").trim();
                                 if (!wfId) return;
                                 setSelectedWorkflowRunId(runId);
-                                setSelectedWorkflowRun(null);
                                 setWorkflowRunsError("");
                                 try {
                                   const res = await fetch(
@@ -988,7 +986,7 @@ export default function WorkflowsEditorClient({
                                   );
                                   const json = await res.json();
                                   if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load run");
-                                  setSelectedWorkflowRun(json.run);
+                                  // (run detail rendering not implemented yet; selecting stores runId only)
                                 } catch (e: unknown) {
                                   setWorkflowRunsError(e instanceof Error ? e.message : String(e));
                                 }
