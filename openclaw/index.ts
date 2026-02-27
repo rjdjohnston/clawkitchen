@@ -40,7 +40,9 @@ async function startKitchen(api: OpenClawPluginApi, cfg: KitchenConfig) {
 
   const host = String(cfg.host || "127.0.0.1").trim();
   const port = Number(cfg.port || 7777);
-  const dev = cfg.dev !== false;
+  // Default to production/stable mode unless explicitly enabled.
+  // Dev mode (turbopack) can transiently 404 routes until compilation finishes.
+  const dev = cfg.dev === true;
   const authToken = String(cfg.authToken || "");
 
   if (!isLocalhost(host) && !authToken.trim()) {
