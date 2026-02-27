@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { NextResponse } from "next/server";
 
+import { errorMessage } from "@/lib/errors";
 import { getKitchenApi } from "@/lib/kitchen-api";
 
 function normalizeId(kind: string, id: string) {
@@ -42,8 +43,8 @@ export async function GET(req: Request) {
     const res = await api.runtime.system.runCommandWithTimeout(["bash", cliPath, "status"], { timeoutMs: 30000 });
 
     return NextResponse.json({ ok: true, orchestratorWorkspace: orchestratorWs, stdout: res.stdout, stderr: res.stderr });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+  } catch (err: unknown) {
+    const msg = errorMessage(err);
     const status = /required|match \//i.test(msg) ? 400 : 500;
     return NextResponse.json({ ok: false, error: msg }, { status });
   }

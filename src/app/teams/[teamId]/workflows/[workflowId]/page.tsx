@@ -22,7 +22,7 @@ export default async function WorkflowEditorPage({
   return (
     <div className="space-y-4 p-6">
       <Link
-        href={`/teams/${encodeURIComponent(teamId)}?tab=workflows`}
+        href={`/teams/${encodeURIComponent(teamId)}/workflows`}
         className="text-sm font-medium hover:underline"
       >
         ← Back

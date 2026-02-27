@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
+import { errorMessage } from "@/lib/errors";
+import { toolsInvoke } from "@/lib/gateway";
 import { listWorkflowRuns, readWorkflowRun, writeWorkflowRun } from "@/lib/workflows/runs-storage";
 import type { WorkflowRunFileV1, WorkflowRunNodeResultV1 } from "@/lib/workflows/runs-types";
 import { readWorkflow } from "@/lib/workflows/storage";
 import type { WorkflowFileV1 } from "@/lib/workflows/types";
-import { toolsInvoke } from "@/lib/gateway";
-
-function errMessage(err: unknown) {
-  return err instanceof Error ? err.message : String(err);
-}
 
 function nowIso() {
   return new Date().toISOString();
@@ -116,7 +113,7 @@ export async function GET(req: Request) {
     void ok;
     return NextResponse.json({ ok: true, ...rest });
   } catch (err: unknown) {
-    return NextResponse.json({ ok: false, error: errMessage(err) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: errorMessage(err) }, { status: 500 });
   }
 }
 
@@ -407,7 +404,7 @@ export async function POST(req: Request) {
                 } catch (e: unknown) {
                   baseRun.approval = {
                     ...baseRun.approval,
-                    outbound: { provider, target, error: errMessage(e), attemptedAt: nowIso() },
+                    outbound: { provider, target, error: errorMessage(e), attemptedAt: nowIso() },
                   } as WorkflowRunFileV1["approval"];
                 }
               }
@@ -431,6 +428,6 @@ export async function POST(req: Request) {
     void ok;
     return NextResponse.json({ ok: true, runId, ...rest });
   } catch (err: unknown) {
-    return NextResponse.json({ ok: false, error: errMessage(err) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: errorMessage(err) }, { status: 500 });
   }
 }

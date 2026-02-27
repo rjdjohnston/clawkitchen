@@ -36,6 +36,28 @@ const eslintConfig = defineConfig([
     files: ["**/team-editor.tsx"],
     rules: { "sonarjs/cognitive-complexity": ["warn", 40] },
   },
+  // Workflow routes/editor: complex form and state machine logic; split would be large refactor
+  {
+    files: [
+      "**/workflow-runs/route.ts",
+      "**/workflows-editor-client.tsx",
+      "**/workflows/route.ts",
+      "**/orchestrator/route.ts",
+      "**/orchestrator/install/route.ts",
+      "**/swarms/start/route.ts",
+      "**/workflows/validate.ts",
+    ],
+    rules: {
+      "sonarjs/cognitive-complexity": ["warn", 45],
+      "sonarjs/no-nested-functions": "off",
+      "sonarjs/no-nested-conditional": "off",
+    },
+  },
+  // Regex in tickets/move and OrchestratorSetupModal: simple slugify patterns, user input bounded
+  {
+    files: ["**/tickets/move/route.ts", "**/OrchestratorSetupModal.tsx"],
+    rules: { "sonarjs/slow-regex": "off" },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
+import { errorMessage } from "@/lib/errors";
 import { deleteWorkflow, listWorkflows, readWorkflow, writeWorkflow } from "@/lib/workflows/storage";
 import type { WorkflowFileV1 } from "@/lib/workflows/types";
-
-function errMessage(err: unknown) {
-  return err instanceof Error ? err.message : String(err);
-}
 
 function isWorkflowFileV1(v: unknown): v is WorkflowFileV1 {
   if (!v || typeof v !== "object") return false;
@@ -38,7 +35,7 @@ export async function GET(req: Request) {
     void ok;
     return NextResponse.json({ ok: true, ...rest });
   } catch (err: unknown) {
-    return NextResponse.json({ ok: false, error: errMessage(err) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: errorMessage(err) }, { status: 500 });
   }
 }
 
@@ -67,7 +64,7 @@ export async function POST(req: Request) {
     void ok;
     return NextResponse.json({ ok: true, ...rest });
   } catch (err: unknown) {
-    return NextResponse.json({ ok: false, error: errMessage(err) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: errorMessage(err) }, { status: 500 });
   }
 }
 
@@ -86,6 +83,6 @@ export async function DELETE(req: Request) {
     void ok;
     return NextResponse.json({ ok: true, ...rest });
   } catch (err: unknown) {
-    return NextResponse.json({ ok: false, error: errMessage(err) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: errorMessage(err) }, { status: 500 });
   }
 }

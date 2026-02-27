@@ -19,6 +19,8 @@ import { TeamAgentsTab } from "./TeamAgentsTab";
 import { TeamSkillsTab } from "./TeamSkillsTab";
 import { TeamCronTab } from "./TeamCronTab";
 import { TeamFilesTab } from "./TeamFilesTab";
+import { OrchestratorPanel } from "../OrchestratorPanel";
+import Link from "next/link";
 
 const TABS = [
   { id: "recipe" as const, label: "Recipe" },
@@ -26,9 +28,13 @@ const TABS = [
   { id: "skills" as const, label: "Skills" },
   { id: "cron" as const, label: "Cron" },
   { id: "files" as const, label: "Files" },
+  { id: "orchestrator" as const, label: "Orchestrator" },
+  { id: "workflows" as const, label: "Workflows" },
 ];
 
-export default function TeamEditor({ teamId }: { teamId: string }) {
+type TabId = Exclude<(typeof TABS)[number]["id"], "workflows">;
+
+export default function TeamEditor({ teamId, initialTab }: { teamId: string; initialTab?: string }) {
   const router = useRouter();
   const [recipes, setRecipes] = useState<RecipeListItem[]>([]);
   const [fromId, setFromId] = useState<string>("");
@@ -39,7 +45,10 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [toName, setToName] = useState<string>(teamId);
   const [content, setContent] = useState<string>("");
   const [loadedRecipeHash, setLoadedRecipeHash] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"recipe" | "agents" | "skills" | "cron" | "files">("recipe");
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    const valid: TabId[] = ["recipe", "agents", "skills", "cron", "files", "orchestrator"];
+    return valid.includes(initialTab as TabId) ? (initialTab as TabId) : "recipe";
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -127,7 +136,11 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
     setTeamMetaRecipeHash(null);
     setPublishOpen(false);
     setDeleteOpen(false);
-  }, [teamId]);
+    const valid: TabId[] = ["recipe", "agents", "skills", "cron", "files", "orchestrator"];
+    if (initialTab && valid.includes(initialTab as TabId)) {
+      setActiveTab(initialTab as TabId);
+    }
+  }, [teamId, initialTab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -356,11 +369,20 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
       </p>
 
       <div className="mt-6 flex flex-wrap gap-2">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={
+        {TABS.map((t) =>
+          t.id === "workflows" ? (
+            <Link
+              key={t.id}
+              href={`/teams/${encodeURIComponent(teamId)}/workflows`}
+              className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-white/10"
+            >
+              {t.label}
+            </Link>
+          ) : (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id as TabId)}
+              className={
               activeTab === t.id
                 ? "rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)]"
                 : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-white/10"
@@ -368,7 +390,8 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
           >
             {t.label}
           </button>
-        ))}
+          )
+        )}
       </div>
 
       {activeTab === "recipe" && (
@@ -443,6 +466,8 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
           onCronAction={onCronAction}
         />
       )}
+
+      {activeTab === "orchestrator" && <OrchestratorPanel teamId={teamId} />}
 
       {activeTab === "files" && (
         <TeamFilesTab
