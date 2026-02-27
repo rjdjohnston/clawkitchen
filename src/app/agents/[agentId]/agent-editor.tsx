@@ -333,7 +333,7 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
             setDeleteError(null);
             setDeleteOpen(true);
           }}
-          className="rounded-[var(--ck-radius-sm)] border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-100 shadow-[var(--ck-shadow-1)] hover:bg-red-500/15 disabled:opacity-50"
+          className="rounded-[var(--ck-radius-sm)] border border-[color:rgba(255,59,48,0.45)] bg-[color:rgba(255,59,48,0.08)] px-3 py-2 text-sm font-medium text-[color:var(--ck-accent-red)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-[color:rgba(255,59,48,0.12)] disabled:opacity-50"
         >
           Delete agent
         </button>

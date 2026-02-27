@@ -141,7 +141,7 @@ export default function GoalEditor({ goalId }: { goalId: string }) {
           <button
             onClick={() => void deleteThisGoal()}
             disabled={saving || loading}
-            className="rounded-[var(--ck-radius-sm)] border border-red-500/40 px-3 py-2 text-sm font-medium text-red-200"
+            className="rounded-[var(--ck-radius-sm)] border border-[color:rgba(255,59,48,0.45)] bg-[color:rgba(255,59,48,0.08)] px-3 py-2 text-sm font-medium text-[color:var(--ck-accent-red)] transition-colors hover:bg-[color:rgba(255,59,48,0.12)]"
           >
             Delete
           </button>

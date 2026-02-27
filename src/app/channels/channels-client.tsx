@@ -26,7 +26,9 @@ function Button({
 }) {
   let base = "rounded-[var(--ck-radius-sm)] px-3 py-2 text-sm font-medium transition disabled:opacity-50 ";
   if (kind === "primary") base += "bg-[var(--ck-accent-red)] text-white";
-  else if (kind === "danger") base += "border border-red-400/40 text-red-200 hover:bg-red-500/10";
+  else if (kind === "danger")
+    base +=
+      "border border-[color:rgba(255,59,48,0.45)] bg-[color:rgba(255,59,48,0.08)] text-[color:var(--ck-accent-red)] hover:bg-[color:rgba(255,59,48,0.12)]";
   else base += "border border-[color:var(--ck-border-subtle)] hover:bg-[color:var(--ck-bg-glass)]";
   return (
     <button className={base} onClick={onClick} disabled={disabled}>
