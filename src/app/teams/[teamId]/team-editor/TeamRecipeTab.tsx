@@ -3,6 +3,7 @@
 import type { RecipeListItem } from "./types";
 
 type TeamRecipeTabProps = {
+  loading?: boolean;
   fromId: string;
   setFromId: (v: string) => void;
   toId: string;
@@ -36,7 +37,12 @@ export function TeamRecipeTab(props: TeamRecipeTabProps) {
     <>
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="ck-glass-strong p-4">
-          <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Custom recipe target</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Custom recipe target</div>
+            {p.loading ? (
+              <div className="text-xs text-[color:var(--ck-text-tertiary)]">Loading team…</div>
+            ) : null}
+          </div>
           <label className="mt-3 block text-xs font-medium text-[color:var(--ck-text-secondary)]">Team id</label>
           <input
             value={p.toId}

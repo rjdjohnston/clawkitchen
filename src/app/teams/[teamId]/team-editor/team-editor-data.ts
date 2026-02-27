@@ -124,6 +124,7 @@ export async function loadTeamEditorInitial(teamId: string, setters: LoadTeamEdi
     setters.setLockedFromId(null);
     setters.setLockedFromName(null);
     setters.setProvenanceMissing(true);
+    const list = (initialData.recipesData.recipes ?? []) as RecipeListItem[];
     const preferred = list.find((r) => r.kind === "team" && r.id === teamId);
     const fallback = list.find((r) => r.kind === "team");
     const pick = preferred ?? fallback;
