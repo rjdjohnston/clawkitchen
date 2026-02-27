@@ -25,47 +25,43 @@ async function getTeamDisplayName(teamId: string) {
   }
 }
 
-export default async function TeamPage({ params }: { params: Promise<{ teamId: string }> }) {
+export default async function TeamPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ teamId: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   // Team pages depend on live OpenClaw state; never serve cached HTML.
   noStore();
 
   const { teamId } = await params;
+  const sp = (await searchParams) ?? {};
+  const tabRaw = sp.tab;
+  const tab = Array.isArray(tabRaw) ? tabRaw[0] : tabRaw;
   const name = await getTeamDisplayName(teamId);
 
   return (
-    <main className="min-h-screen p-8">
-      <div className="mx-auto mb-4 flex max-w-6xl items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <Link
-            href="/"
-            className="text-sm font-medium text-[color:var(--ck-text-secondary)] transition-colors hover:text-[color:var(--ck-text-primary)]"
-          >
-            ← Home
-          </Link>
-          <Link
-            href="/recipes"
-            className="text-sm font-medium text-[color:var(--ck-text-secondary)] transition-colors hover:text-[color:var(--ck-text-primary)]"
-          >
-            ← Recipes
-          </Link>
-        </div>
-
-        <div className="text-right">
-          <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">{name || teamId}</div>
+    <div className="flex flex-col gap-4 p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="text-xl font-semibold tracking-tight text-[color:var(--ck-text-primary)]">
+            {name || teamId}
+          </div>
           <div className="text-xs text-[color:var(--ck-text-tertiary)]">{teamId}</div>
         </div>
+
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/goals?team=${encodeURIComponent(teamId)}`}
+            className="text-sm font-medium text-[color:var(--ck-text-secondary)] hover:underline"
+          >
+            View goals →
+          </Link>
+        </div>
       </div>
 
-      <div className="mx-auto mb-4 flex max-w-6xl items-center justify-end">
-        <Link
-          href={`/goals?team=${encodeURIComponent(teamId)}`}
-          className="text-sm font-medium text-[color:var(--ck-text-secondary)] hover:underline"
-        >
-          View goals for this team →
-        </Link>
-      </div>
-
-      <TeamEditor teamId={teamId} />
-    </main>
+      <TeamEditor teamId={teamId} initialTab={typeof tab === "string" ? tab : undefined} />
+    </div>
   );
 }

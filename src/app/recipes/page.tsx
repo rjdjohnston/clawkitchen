@@ -57,7 +57,7 @@ export default async function RecipesPage() {
   const customAgentRecipes = workspace.filter((r) => r.kind === "agent");
 
   return (
-    <div className="ck-glass mx-auto max-w-4xl p-6 sm:p-8">
+    <div className="ck-glass w-full p-6 sm:p-8">
       <div className="flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">Recipes</h1>
         <Link

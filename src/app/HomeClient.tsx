@@ -98,7 +98,7 @@ export default function HomeClient({
   }, [agents, teamFilter, teamNames]);
 
   return (
-    <div className="ck-glass mx-auto max-w-5xl p-6 sm:p-8">
+    <div className="ck-glass w-full p-6 sm:p-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">

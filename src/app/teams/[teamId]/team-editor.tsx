@@ -99,7 +99,7 @@ function forceFrontmatterTeamTeamId(md: string, teamId: string) {
   return `---\n${next.join("\n")}\n---\n${body}`;
 }
 
-export default function TeamEditor({ teamId }: { teamId: string }) {
+export default function TeamEditor({ teamId, initialTab }: { teamId: string; initialTab?: string }) {
   const router = useRouter();
   const [recipes, setRecipes] = useState<RecipeListItem[]>([]);
   const [fromId, setFromId] = useState<string>("");
@@ -111,6 +111,14 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   const [content, setContent] = useState<string>("");
   const [loadedRecipeHash, setLoadedRecipeHash] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"recipe" | "agents" | "skills" | "cron" | "workflows" | "files" | "orchestrator">("recipe");
+
+  useEffect(() => {
+    const allowed = ["recipe", "agents", "skills", "cron", "workflows", "files", "orchestrator"] as const;
+    if (initialTab && (allowed as readonly string[]).includes(initialTab)) {
+      setActiveTab(initialTab as (typeof allowed)[number]);
+    }
+  }, [initialTab]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -658,14 +666,15 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
   }
 
   // Initial load only gates the minimal state (recipes + team meta). Everything else streams in.
-  if (loading) return <div className="ck-glass mx-auto max-w-4xl p-6">Loading…</div>;
+  if (loading) return <div className="ck-glass w-full p-6">Loading…</div>;
 
   return (
-    <div className="ck-glass mx-auto max-w-6xl p-6 sm:p-8">
+    <div className="ck-glass w-full p-6 sm:p-8">
       <h1 className="text-2xl font-semibold tracking-tight">Team editor</h1>
       <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
         Bootstrap a <strong>custom team recipe</strong> for this installed team, without modifying builtin recipes.
       </p>
+
 
       <div className="mt-6 flex flex-wrap gap-2">
         {(
@@ -681,7 +690,14 @@ export default function TeamEditor({ teamId }: { teamId: string }) {
         ).map((t) => (
           <button
             key={t.id}
-            onClick={() => setActiveTab(t.id)}
+            onClick={() => {
+              setActiveTab(t.id);
+              try {
+                router.replace(`/teams/${encodeURIComponent(teamId)}?tab=${encodeURIComponent(t.id)}`, { scroll: false });
+              } catch {
+                // ignore
+              }
+            }}
             className={
               activeTab === t.id
                 ? "rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)]"

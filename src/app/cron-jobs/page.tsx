@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export default function CronJobsPage() {
   return (
-    <div className="ck-glass mx-auto max-w-5xl p-6 sm:p-8">
+    <div className="ck-glass w-full p-6 sm:p-8">
       <div className="flex items-baseline justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">Cron Jobs (recipe-installed)</h1>
         <div className="flex gap-3">
