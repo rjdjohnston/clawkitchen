@@ -46,6 +46,7 @@ export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [confirmMove, setConfirmMove] = useState<{ ticket: TicketSummary; to: TicketStage } | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>("30d");
   const [customFrom, setCustomFrom] = useState<string>("");
   const [customTo, setCustomTo] = useState<string>("");
@@ -213,14 +214,11 @@ export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
                       Move
                       <select
                         className="ml-2 rounded border border-[color:var(--ck-border-subtle)] bg-transparent px-2 py-1 text-xs"
-                        defaultValue={t.stage}
+                        value={t.stage}
                         onChange={(e) => {
                           const to = e.target.value as TicketStage;
-                          startTransition(() => {
-                            move(t, to)
-                              .then(() => router.refresh())
-                              .catch((err) => setError(err.message));
-                          });
+                          if (to === t.stage) return;
+                          setConfirmMove({ ticket: t, to });
                         }}
                       >
                         {STAGES.map((s) => (
@@ -241,6 +239,60 @@ export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
       <p className="text-xs text-[color:var(--ck-text-tertiary)]">
         Source of truth: development-team markdown tickets (via openclaw recipes move-ticket).
       </p>
+
+      {confirmMove ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="ck-glass w-full max-w-lg rounded-[var(--ck-radius-md)] border border-[color:var(--ck-border-strong)] p-4">
+            <div className="text-sm font-semibold text-[color:var(--ck-text-primary)]">Confirm status change</div>
+
+            <div className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
+              Move <span className="font-medium text-[color:var(--ck-text-primary)]">{String(confirmMove.ticket.number).padStart(4, "0")}</span> to{" "}
+              <span className="font-medium text-[color:var(--ck-text-primary)]">
+                {STAGES.find((s) => s.key === confirmMove.to)?.label ?? confirmMove.to}
+              </span>
+              ?
+            </div>
+
+            <div className="mt-3 rounded-[var(--ck-radius-sm)] border border-[color:var(--ck-border-subtle)] bg-[color:var(--ck-bg-glass-strong)] p-3 text-xs text-[color:var(--ck-text-tertiary)]">
+              {confirmMove.to === "done" ? (
+                <>
+                  This will move the ticket file to <code>work/done/</code> and it will stop being selected by automated agent loops.
+                  <br />
+                  ClawKitchen will also append an audit comment under <code>## Comments</code>.
+                </>
+              ) : (
+                <>This will move the ticket file on disk to the selected lane.</>
+              )}
+            </div>
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                className="rounded border border-[color:var(--ck-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--ck-text-secondary)]"
+                onClick={() => setConfirmMove(null)}
+                disabled={isPending}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded bg-[color:var(--ck-accent)] px-3 py-1.5 text-xs font-medium text-black"
+                onClick={() => {
+                  const payload = confirmMove;
+                  if (!payload) return;
+                  setConfirmMove(null);
+                  startTransition(() => {
+                    move(payload.ticket, payload.to)
+                      .then(() => router.refresh())
+                      .catch((err) => setError(err.message));
+                  });
+                }}
+                disabled={isPending}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -58,14 +58,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return m ? decodeURIComponent(m[1]) : null;
   }, [pathname]);
 
-  const [collapsed, setCollapsed] = useState(() => {
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Avoid hydration mismatch: render un-collapsed on the server, then sync from localStorage after mount.
+  useEffect(() => {
     try {
       const v = localStorage.getItem("ck-leftnav-collapsed");
-      return v === "1";
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCollapsed(v === "1");
     } catch {
-      return false;
+      // ignore
     }
-  });
+  }, []);
 
   function toggleCollapsed() {
     setCollapsed((v) => {
