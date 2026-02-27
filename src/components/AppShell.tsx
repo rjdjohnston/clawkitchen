@@ -9,7 +9,7 @@ import { ToastProvider } from "@/components/ToastProvider";
 function Icon({ children }: { children: React.ReactNode }) {
   return (
     <span
-      className="grid size-6 place-items-center text-[color:var(--ck-text-secondary)]"
+      className="grid size-7 place-items-center text-[color:var(--ck-text-secondary)]"
       aria-hidden
     >
       {children}
@@ -110,7 +110,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       label: "Home",
       icon: (
         <Icon>
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M3 11l9-8 9 8" />
             <path d="M5 10v10h14V10" />
           </svg>
@@ -122,7 +122,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       label: "Recipes",
       icon: (
         <Icon>
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M6 4h12v16H6z" />
             <path d="M9 8h6" />
             <path d="M9 12h6" />
@@ -135,7 +135,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       label: "Tickets",
       icon: (
         <Icon>
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M4 7h16v4a2 2 0 0 1 0 4v4H4v-4a2 2 0 0 0 0-4z" />
           </svg>
         </Icon>
@@ -146,7 +146,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       label: "Goals",
       icon: (
         <Icon>
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="9" />
             <path d="M12 7v5l3 3" />
           </svg>
@@ -158,7 +158,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       label: "Cron jobs",
       icon: (
         <Icon>
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="9" />
             <path d="M12 7v5" />
           </svg>
@@ -170,7 +170,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       label: "Settings",
       icon: (
         <Icon>
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
             <path d="M19.4 15a7.9 7.9 0 0 0 .1-1l2-1.5-2-3.5-2.4.5a7.8 7.8 0 0 0-1.7-1L13.5 3h-4L8.6 6.5a7.8 7.8 0 0 0-1.7 1L4.5 7l-2 3.5 2 1.5a7.9 7.9 0 0 0 .1 1l-2 1.5 2 3.5 2.4-.5a7.8 7.8 0 0 0 1.7 1L10.5 21h4l.9-3.5a7.8 7.8 0 0 0 1.7-1l2.4.5 2-3.5-2-1.5Z" />
           </svg>
