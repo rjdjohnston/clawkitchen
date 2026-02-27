@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { errorMessage } from "@/lib/errors";
+import { fetchJson } from "@/lib/fetch-json";
 
 type Mode = "off" | "prompt" | "on";
 
@@ -15,15 +17,16 @@ export default function SettingsClient() {
       setLoading(true);
       setMsg("");
       try {
-        const res = await fetch("/api/settings/cron-installation", { cache: "no-store" });
-        const text = await res.text();
-        const json = text ? (JSON.parse(text) as { ok?: boolean; value?: string; error?: string }) : {};
-        if (!res.ok) throw new Error(json.error || "Failed to load config");
+        const json = await fetchJson<{ ok?: boolean; value?: string; error?: string }>(
+          "/api/settings/cron-installation",
+          { cache: "no-store" }
+        );
+        if (!json.ok) throw new Error(json.error || "Failed to load config");
         const v = String(json.value || "").trim();
         if (v === "off" || v === "prompt" || v === "on") setMode(v);
         else setMode("prompt");
       } catch (e: unknown) {
-        setMsg(e instanceof Error ? e.message : String(e));
+        setMsg(errorMessage(e));
       } finally {
         setLoading(false);
       }
@@ -34,18 +37,16 @@ export default function SettingsClient() {
     setSaving(true);
     setMsg("");
     try {
-      const res = await fetch("/api/settings/cron-installation", {
+      const json = await fetchJson<{ ok?: boolean; error?: string }>("/api/settings/cron-installation", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ value: next }),
       });
-      const text = await res.text();
-      const json = text ? (JSON.parse(text) as { ok?: boolean; error?: string }) : {};
-      if (!res.ok) throw new Error(json.error || "Save failed");
+      if (!json.ok) throw new Error(json.error || "Save failed");
       setMode(next);
       setMsg("Saved.");
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : String(e));
+      setMsg(errorMessage(e));
     } finally {
       setSaving(false);
     }

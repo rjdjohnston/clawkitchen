@@ -1,27 +1,19 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
-import YAML from "yaml";
 import { runOpenClaw } from "@/lib/openclaw";
-import { readOpenClawConfig, getWorkspaceRecipesDir } from "@/lib/paths";
+import { buildScaffoldArgs } from "@/lib/scaffold";
+import {
+  validateAgentId,
+  validateTeamId,
+  withCronOverride,
+  persistTeamProvenance,
+  persistAgentProvenance,
+} from "./helpers";
 
-type ReqBody =
-  | {
-      kind: "agent";
-      recipeId: string;
-      agentId?: string;
-      name?: string;
-      applyConfig?: boolean;
-      overwrite?: boolean;
-    }
-  | {
-      kind: "team";
-      recipeId: string;
-      teamId?: string;
-      applyConfig?: boolean;
-      overwrite?: boolean;
-    };
+type ReqBody = Parameters<typeof buildScaffoldArgs>[0] & {
+  cronInstallChoice?: "yes" | "no";
+  allowExisting?: boolean;
+};
 
 const asString = (v: unknown) => {
   if (typeof v === "string") return v;
@@ -34,20 +26,20 @@ function sha256(text: string) {
   return crypto.createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-function teamDirFromTeamId(baseWorkspace: string, teamId: string) {
-  return path.resolve(baseWorkspace, "..", `workspace-${teamId}`);
+async function getRecipeIds(): Promise<Set<string>> {
+  const recipesRes = await runOpenClaw(["recipes", "list"]);
+  if (!recipesRes.ok) return new Set();
+  try {
+    const recipes = JSON.parse(recipesRes.stdout) as Array<{ id?: unknown }>;
+    return new Set(recipes.map((r) => String(r.id ?? "").trim()).filter(Boolean));
+  } catch {
+    return new Set();
+  }
 }
 
-const TEAM_META_FILE = "team.json";
-const AGENT_META_FILE = "agent.json";
-
 export async function POST(req: Request) {
-  const body = (await req.json()) as ReqBody & { cronInstallChoice?: "yes" | "no"; allowExisting?: boolean };
+  const body = (await req.json()) as ReqBody;
 
-  const args: string[] = ["recipes", body.kind === "team" ? "scaffold-team" : "scaffold", body.recipeId];
-
-  // Used for "Publish changes" detection in the UI.
-  // Best-effort only (we don't want to block scaffolding on hashing).
   let recipeHash: string | null = null;
   try {
     const shown = await runOpenClaw(["recipes", "show", body.recipeId]);
@@ -56,254 +48,37 @@ export async function POST(req: Request) {
     // ignore
   }
 
-  if (body.overwrite) args.push("--overwrite");
-  if (body.applyConfig) args.push("--apply-config");
-
-  // scaffold/scaffold-team also writes a workspace recipe file; allow re-runs against existing teams.
-  if (body.allowExisting || body.overwrite) args.push("--overwrite-recipe");
-
-  if (body.kind === "agent") {
-    if (body.agentId) args.push("--agent-id", body.agentId);
-    if (body.name) args.push("--name", body.name);
-  } else {
-    if (body.teamId) args.push("--team-id", body.teamId);
-  }
-
-  // Kitchen runs scaffold non-interactively, so the recipes plugin cannot prompt.
-  // To emulate prompt semantics, we optionally override cronInstallation for this one scaffold run.
-  let prevCronInstallation: string | null = null;
-  const override = body.cronInstallChoice;
+  const args = buildScaffoldArgs(body, { allowExisting: body.allowExisting });
 
   try {
-    // Collision guards: site-wide rules.
-    // 1) Do not allow creating a team/agent with an id that collides with ANY recipe id.
-    //    (BUT allow when overwrite=true, which is used for re-scaffolding/publish flows.)
-    // 2) Do not allow creating a team/agent that already exists unless overwrite was explicitly set.
     if (!body.overwrite && !body.allowExisting) {
-      const recipesRes = await runOpenClaw(["recipes", "list"]);
-      if (recipesRes.ok) {
-        try {
-          const recipes = JSON.parse(recipesRes.stdout) as Array<{ id?: unknown }>;
-          const recipeIds = new Set(recipes.map((r) => String(r.id ?? "").trim()).filter(Boolean));
-
-          if (body.kind === "agent") {
-            const agentId = String(body.agentId ?? "").trim();
-            if (agentId && recipeIds.has(agentId)) {
-              return NextResponse.json(
-                { ok: false, error: `Agent id cannot match an existing recipe id: ${agentId}. Choose a new agent id.` },
-                { status: 409 },
-              );
-            }
-          }
-
-          if (body.kind === "team") {
-            const teamId = String(body.teamId ?? "").trim();
-            if (teamId && recipeIds.has(teamId)) {
-              return NextResponse.json(
-                { ok: false, error: `Team id cannot match an existing recipe id: ${teamId}. Choose a new team id.` },
-                { status: 409 },
-              );
-            }
-          }
-        } catch {
-          // ignore parse errors
-        }
+      const recipeIds = await getRecipeIds();
+      if (body.kind === "agent") {
+        const agentId = String(body.agentId ?? "").trim();
+        const err = await validateAgentId(agentId, recipeIds);
+        if (err) return err;
+      } else {
+        const teamId = String(body.teamId ?? "").trim();
+        const err = await validateTeamId(teamId, recipeIds);
+        if (err) return err;
       }
     }
 
-    if (!body.overwrite && !body.allowExisting) {
-      if (body.kind === "agent") {
-        const agentId = String(body.agentId ?? "").trim();
-        if (agentId) {
-          const agentsRes = await runOpenClaw(["agents", "list", "--json"]);
-          if (agentsRes.ok) {
-            try {
-              const agents = JSON.parse(agentsRes.stdout) as Array<{ id?: unknown }>;
-              const exists = agents.some((a) => String(a.id ?? "").trim() === agentId);
-              if (exists) {
-                return NextResponse.json(
-                  { ok: false, error: `Agent already exists: ${agentId}. Choose a new id or enable overwrite.` },
-                  { status: 409 },
-                );
-              }
-            } catch {
-              // ignore parse errors; fall through to scaffold
-            }
-          }
-        }
-      }
+    return await withCronOverride(body.cronInstallChoice, async () => {
+      const { stdout, stderr } = await runOpenClaw(args);
 
       if (body.kind === "team") {
         const teamId = String(body.teamId ?? "").trim();
-        if (teamId) {
-          try {
-            const cfg = await readOpenClawConfig();
-            const baseWorkspace = String(cfg.agents?.defaults?.workspace ?? "").trim();
-            if (baseWorkspace) {
-              const teamDir = teamDirFromTeamId(baseWorkspace, teamId);
-              const hasWorkspace = await fs
-                .stat(teamDir)
-                .then(() => true)
-                .catch(() => false);
-              if (hasWorkspace) {
-                return NextResponse.json(
-                  { ok: false, error: `Team workspace already exists: ${teamId}. Choose a new id or enable overwrite.` },
-                  { status: 409 },
-                );
-              }
-            }
-          } catch {
-            // ignore and fall through
-          }
-
-          // Also check if team agents already exist in config.
-          const agentsRes = await runOpenClaw(["agents", "list", "--json"]);
-          if (agentsRes.ok) {
-            try {
-              const agents = JSON.parse(agentsRes.stdout) as Array<{ id?: unknown }>;
-              const hasAgents = agents.some((a) => String(a.id ?? "").startsWith(`${teamId}-`));
-              if (hasAgents) {
-                return NextResponse.json(
-                  { ok: false, error: `Team agents already exist for team: ${teamId}. Choose a new id or enable overwrite.` },
-                  { status: 409 },
-                );
-              }
-            } catch {
-              // ignore parse errors
-            }
-          }
-        }
+        if (teamId) await persistTeamProvenance(teamId, body.recipeId, recipeHash);
       }
-    }
 
-    if (override === "yes" || override === "no") {
-      const cfgPath = "plugins.entries.recipes.config.cronInstallation";
-      const prev = await runOpenClaw(["config", "get", cfgPath]);
-      prevCronInstallation = prev.stdout.trim() || null;
-      const next = override === "yes" ? "on" : "off";
-      await runOpenClaw(["config", "set", cfgPath, next]);
-    }
-
-    const { stdout, stderr } = await runOpenClaw(args);
-
-    // Persist provenance so editors can show what recipe created what.
-    if (body.kind === "team") {
-      const teamId = String(body.teamId ?? "").trim();
-      if (teamId) {
-        try {
-          const cfg = await readOpenClawConfig();
-          const baseWorkspace = String(cfg.agents?.defaults?.workspace ?? "").trim();
-          if (baseWorkspace) {
-            const teamDir = teamDirFromTeamId(baseWorkspace, teamId);
-
-            // Best-effort recipe name snapshot.
-            let recipeName: string | undefined;
-            try {
-              const list = await runOpenClaw(["recipes", "list"]);
-              if (list.ok) {
-                const items = JSON.parse(list.stdout) as Array<{ id?: string; name?: string }>;
-                const hit = items.find((r) => String(r.id ?? "").trim() === body.recipeId);
-                const n = String(hit?.name ?? "").trim();
-                if (n) recipeName = n;
-              }
-            } catch {
-              // ignore
-            }
-
-            const now = new Date().toISOString();
-            const meta = {
-              teamId,
-              recipeId: body.recipeId,
-              ...(recipeName ? { recipeName } : {}),
-              ...(recipeHash ? { recipeHash } : {}),
-              scaffoldedAt: now,
-              attachedAt: now,
-            };
-
-            await fs.mkdir(teamDir, { recursive: true });
-            await fs.writeFile(path.join(teamDir, TEAM_META_FILE), JSON.stringify(meta, null, 2) + "\n", "utf8");
-          }
-
-          // Best-effort: ensure the generated workspace recipe's `team.teamId` matches the new team id.
-          // Some template recipes carry a `team.teamId` that should not leak into cloned/scaffolded copies.
-          try {
-            const recipesDir = await getWorkspaceRecipesDir();
-            const recipePath = path.join(recipesDir, `${teamId}.md`);
-            const md = await fs.readFile(recipePath, "utf8");
-            if (md.startsWith("---\n")) {
-              const end = md.indexOf("\n---\n", 4);
-              if (end !== -1) {
-                const yamlText = md.slice(4, end + 1);
-                const rest = md.slice(end + 5);
-                const fm = (YAML.parse(yamlText) ?? {}) as Record<string, unknown>;
-                const nextFm: Record<string, unknown> = {
-                  ...fm,
-                  team: {
-                    ...(typeof fm.team === "object" && fm.team ? (fm.team as Record<string, unknown>) : {}),
-                    teamId,
-                  },
-                };
-                const nextYaml = YAML.stringify(nextFm).trimEnd();
-                const nextMd = `---\n${nextYaml}\n---\n${rest}`;
-                if (nextMd !== md) await fs.writeFile(recipePath, nextMd, "utf8");
-              }
-            }
-          } catch {
-            // ignore
-          }
-        } catch {
-          // best-effort only; scaffold should still succeed
-        }
+      if (body.kind === "agent") {
+        const agentId = String(body.agentId ?? "").trim();
+        if (agentId) await persistAgentProvenance(agentId, body.recipeId, recipeHash);
       }
-    }
 
-    // Persist agent provenance so we can block recipe deletion while in use.
-    if (body.kind === "agent") {
-      const agentId = String(body.agentId ?? "").trim();
-      if (agentId) {
-        try {
-          const cfg = await readOpenClawConfig();
-          const baseWorkspace = String(cfg.agents?.defaults?.workspace ?? "").trim();
-          if (baseWorkspace) {
-            const agentDir = path.resolve(baseWorkspace, "agents", agentId);
-
-            // Best-effort recipe name snapshot.
-            let recipeName: string | undefined;
-            try {
-              const list = await runOpenClaw(["recipes", "list"]);
-              if (list.ok) {
-                const items = JSON.parse(list.stdout) as Array<{ id?: string; name?: string }>;
-                const hit = items.find((r) => String(r.id ?? "").trim() === body.recipeId);
-                const n = String(hit?.name ?? "").trim();
-                if (n) recipeName = n;
-              }
-            } catch {
-              // ignore
-            }
-
-            const now = new Date().toISOString();
-            const meta = {
-              agentId,
-              recipeId: body.recipeId,
-              ...(recipeName ? { recipeName } : {}),
-              ...(recipeHash ? { recipeHash } : {}),
-              scaffoldedAt: now,
-              attachedAt: now,
-            };
-
-            await fs.mkdir(agentDir, { recursive: true });
-            await fs.writeFile(path.join(agentDir, AGENT_META_FILE), JSON.stringify(meta, null, 2) + "\n", "utf8");
-          }
-        } catch {
-          // best-effort only
-        }
-      }
-    }
-
-    // Note: do NOT restart the gateway here. Some flows (like Add agent) will
-    // poll for updated state and only restart if necessary to avoid global slowness.
-
-    return NextResponse.json({ ok: true, args, stdout, stderr });
+      return NextResponse.json({ ok: true, args, stdout, stderr });
+    });
   } catch (e: unknown) {
     const err = e as { message?: string; stdout?: unknown; stderr?: unknown };
     return NextResponse.json(
@@ -316,14 +91,5 @@ export async function POST(req: Request) {
       },
       { status: 500 }
     );
-  } finally {
-    if (prevCronInstallation !== null) {
-      try {
-        await runOpenClaw(["config", "set", "plugins.entries.recipes.config.cronInstallation", prevCronInstallation]);
-      } catch {
-        // best-effort restore
-      }
-    }
   }
 }
-

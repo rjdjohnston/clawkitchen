@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { errorMessage } from "@/lib/errors";
+import { fetchJson } from "@/lib/fetch-json";
+import { isRecord } from "@/lib/type-guards";
 
 type ChannelConfig = Record<string, unknown>;
 
@@ -9,10 +12,6 @@ type ChannelsResponse = {
   channels?: Record<string, unknown>;
   error?: string;
 };
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return Boolean(v) && typeof v === "object" && !Array.isArray(v);
-}
 
 function Button({
   children,
@@ -25,13 +24,10 @@ function Button({
   kind?: "primary" | "danger";
   disabled?: boolean;
 }) {
-  const base =
-    "rounded-[var(--ck-radius-sm)] px-3 py-2 text-sm font-medium transition disabled:opacity-50 " +
-    (kind === "primary"
-      ? "bg-[var(--ck-accent-red)] text-white"
-      : kind === "danger"
-        ? "border border-red-400/40 text-red-200 hover:bg-red-500/10"
-        : "border border-[color:var(--ck-border-subtle)] hover:bg-[color:var(--ck-bg-glass)]");
+  let base = "rounded-[var(--ck-radius-sm)] px-3 py-2 text-sm font-medium transition disabled:opacity-50 ";
+  if (kind === "primary") base += "bg-[var(--ck-accent-red)] text-white";
+  else if (kind === "danger") base += "border border-red-400/40 text-red-200 hover:bg-red-500/10";
+  else base += "border border-[color:var(--ck-border-subtle)] hover:bg-[color:var(--ck-bg-glass)]";
   return (
     <button className={base} onClick={onClick} disabled={disabled}>
       {children}
@@ -49,16 +45,16 @@ export default function ChannelsClient() {
   const [saving, setSaving] = useState(false);
 
   async function fetchBindings(): Promise<{ ok: true; channels: Record<string, unknown> } | { ok: false; error: string }> {
-    const res = await fetch("/api/channels/bindings", { cache: "no-store" });
-    const data = (await res.json()) as ChannelsResponse;
-    if (!res.ok || !data?.ok) {
-      return { ok: false, error: String(data?.error ?? `Failed to load channels (${res.status})`) };
+    try {
+      const data = await fetchJson<ChannelsResponse>("/api/channels/bindings", { cache: "no-store" });
+      const ch = isRecord(data.channels) ? data.channels : {};
+      return { ok: true, channels: ch };
+    } catch (e: unknown) {
+      return { ok: false, error: errorMessage(e) };
     }
-    const ch = isRecord(data.channels) ? data.channels : {};
-    return { ok: true, channels: ch };
   }
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -72,12 +68,12 @@ export default function ChannelsClient() {
       setChannels(result.channels);
       setLoading(false);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = errorMessage(e);
       setError(msg);
       setChannels({});
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,8 +84,7 @@ export default function ChannelsClient() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refresh]);
 
   const providers = useMemo(() => {
     const keys = Object.keys(channels);
@@ -101,6 +96,23 @@ export default function ChannelsClient() {
     setProvider(p);
     const cfg = channels[p];
     setConfigJson(JSON.stringify(cfg ?? {}, null, 2) + "\n");
+  }
+
+  async function mutate(
+    method: "PUT" | "DELETE",
+    body: { provider: string; config?: Record<string, unknown> }
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    try {
+      const data = await fetchJson<ChannelsResponse>("/api/channels/bindings", {
+        method,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!data?.ok) return { ok: false, error: String(data?.error ?? `Failed to ${method === "PUT" ? "save" : "delete"}`) };
+      return { ok: true };
+    } catch (e: unknown) {
+      return { ok: false, error: errorMessage(e) };
+    }
   }
 
   async function upsert() {
@@ -121,41 +133,28 @@ export default function ChannelsClient() {
       return;
     }
 
-    const res = await fetch("/api/channels/bindings", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ provider: provider.trim(), config: parsed }),
-    });
-    const data = (await res.json()) as ChannelsResponse;
-    if (!res.ok || !data?.ok) {
-      setError(String(data?.error ?? "Failed to save"));
+    const result = await mutate("PUT", { provider: provider.trim(), config: parsed });
+    if (!result.ok) {
+      setError(result.error);
       setSaving(false);
       return;
     }
-
     await refresh();
     setSaving(false);
   }
 
   async function remove(p: string) {
-    const ok = window.confirm(`Delete channel binding "${p}"?`);
-    if (!ok) return;
+    if (!window.confirm(`Delete channel binding "${p}"?`)) return;
 
     setSaving(true);
     setError(null);
 
-    const res = await fetch("/api/channels/bindings", {
-      method: "DELETE",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ provider: p }),
-    });
-    const data = (await res.json()) as ChannelsResponse;
-    if (!res.ok || !data?.ok) {
-      setError(String(data?.error ?? "Failed to delete"));
+    const result = await mutate("DELETE", { provider: p });
+    if (!result.ok) {
+      setError(result.error);
       setSaving(false);
       return;
     }
-
     await refresh();
     setSaving(false);
   }
@@ -198,11 +197,11 @@ export default function ChannelsClient() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="ck-glass p-4">
           <div className="text-sm font-medium">Bindings</div>
-          {loading ? (
-            <div className="mt-3 text-sm text-[color:var(--ck-text-secondary)]">Loading…</div>
-          ) : providers.length === 0 ? (
+          {loading && <div className="mt-3 text-sm text-[color:var(--ck-text-secondary)]">Loading…</div>}
+          {!loading && providers.length === 0 && (
             <div className="mt-3 text-sm text-[color:var(--ck-text-secondary)]">No bindings configured.</div>
-          ) : (
+          )}
+          {!loading && providers.length > 0 && (
             <div className="mt-3 space-y-2">
               {providers.map((p) => (
                 <button

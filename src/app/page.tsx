@@ -1,25 +1,11 @@
-import { runOpenClaw } from "@/lib/openclaw";
 import { unstable_noStore as noStore } from "next/cache";
+import { type AgentListItem } from "@/lib/agents";
+import { runOpenClaw } from "@/lib/openclaw";
+import { listRecipes } from "@/lib/recipes";
 import HomeClient from "./HomeClient";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-type AgentListItem = {
-  id: string;
-  identityName?: string;
-  workspace?: string;
-  model?: string;
-  isDefault?: boolean;
-};
-
-type RecipeListItem = {
-  id: string;
-  name: string;
-  kind: "agent" | "team";
-  source: "builtin" | "workspace";
-};
-
 async function getAgents(): Promise<AgentListItem[]> {
   const res = await runOpenClaw(["agents", "list", "--json"]);
   if (!res.ok) return [];
@@ -27,27 +13,14 @@ async function getAgents(): Promise<AgentListItem[]> {
 }
 
 async function getTeamsFromRecipes(): Promise<{ teamNames: Record<string, string> }> {
-  const res = await runOpenClaw(["recipes", "list"]);
-  if (!res.ok) return { teamNames: {} };
-
-  let items: RecipeListItem[] = [];
-  try {
-    items = JSON.parse(res.stdout) as RecipeListItem[];
-  } catch {
-    return { teamNames: {} };
-  }
-
+  const items = await listRecipes();
   const teamNames: Record<string, string> = {};
-
   for (const r of items) {
     if (r.kind !== "team") continue;
     const name = String(r.name ?? "").trim();
     if (!name) continue;
-
     teamNames[r.id] = name;
-
   }
-
   return { teamNames };
 }
 

@@ -10,6 +10,12 @@ const stepLabel: Record<ScaffoldOverlayStep, string> = {
   3: "Serving them up hot…",
 };
 
+function getStepCircleClass(done: boolean, active: boolean): string {
+  if (done) return "bg-emerald-400";
+  if (active) return "bg-[var(--ck-accent-red)] animate-pulse";
+  return "bg-white/20";
+}
+
 export function ScaffoldOverlay({
   open,
   step,
@@ -54,16 +60,7 @@ export function ScaffoldOverlay({
               const done = s < step;
               return (
                 <div key={s} className="flex items-center gap-4">
-                  <div
-                    className={
-                      "h-4 w-4 rounded-full " +
-                      (done
-                        ? "bg-emerald-400"
-                        : active
-                          ? "bg-[var(--ck-accent-red)] animate-pulse"
-                          : "bg-white/20")
-                    }
-                  />
+                  <div className={"h-4 w-4 rounded-full " + getStepCircleClass(done, active)} />
                   <div className={done ? "text-[color:var(--ck-text-secondary)] line-through" : "text-[color:var(--ck-text-primary)]"}>
                     {stepLabel[s]}
                   </div>

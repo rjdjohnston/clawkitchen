@@ -1,4 +1,4 @@
-import type { WorkflowEdgeV1, WorkflowFileV1, WorkflowNodeV1, WorkflowTriggerV1 } from "@/lib/workflows/types";
+import type { WorkflowEdgeV1, WorkflowFileV1, WorkflowNodeV1, WorkflowTriggerCronV1 } from "@/lib/workflows/types";
 
 export type WorkflowValidationResult = {
   errors: string[];
@@ -29,7 +29,7 @@ export function validateWorkflowFileV1(wf: WorkflowFileV1): WorkflowValidationRe
 
   const nodes: WorkflowNodeV1[] = Array.isArray(wf.nodes) ? wf.nodes : [];
   const edges: WorkflowEdgeV1[] = Array.isArray(wf.edges) ? wf.edges : [];
-  const triggers: WorkflowTriggerV1[] = Array.isArray(wf.triggers) ? wf.triggers : [];
+  const triggers: WorkflowTriggerCronV1[] = Array.isArray(wf.triggers) ? wf.triggers : [];
 
   const nodeIds = nodes.map((n) => String(n?.id ?? "").trim()).filter(Boolean);
   if (nodeIds.length !== nodes.length) errors.push("all nodes must have a non-empty id");

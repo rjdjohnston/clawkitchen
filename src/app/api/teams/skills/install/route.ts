@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { runOpenClaw } from "@/lib/openclaw";
+import { installSkillErrorResponse } from "@/lib/api-route-helpers";
 
 export async function POST(req: Request) {
   const body = (await req.json()) as { teamId?: string; skill?: string };
@@ -11,19 +12,7 @@ export async function POST(req: Request) {
 
   const args = ["recipes", "install-skill", skill, "--team-id", teamId, "--yes"];
   const res = await runOpenClaw(args);
-  if (!res.ok) {
-    const stdout = res.stdout?.trim();
-    const stderr = res.stderr?.trim();
-    return NextResponse.json(
-      {
-        ok: false,
-        error: stderr || stdout || `openclaw ${args.join(" ")} failed (exit=${res.exitCode})`,
-        stdout: res.stdout,
-        stderr: res.stderr,
-      },
-      { status: 500 },
-    );
-  }
+  if (!res.ok) return installSkillErrorResponse(args, res);
 
   return NextResponse.json({ ok: true, teamId, skill, stdout: res.stdout, stderr: res.stderr });
 }

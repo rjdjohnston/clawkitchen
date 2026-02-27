@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { NextResponse } from "next/server";
+import { errorMessage } from "@/lib/errors";
 
 export async function GET() {
   const home = os.homedir();
@@ -17,6 +18,6 @@ export async function GET() {
     return NextResponse.json({ ok: true, skillsDir: globalSkillsDir, skills });
   } catch (e: unknown) {
     // If missing, treat as empty.
-    return NextResponse.json({ ok: true, skillsDir: globalSkillsDir, skills: [], note: e instanceof Error ? e.message : String(e) });
+    return NextResponse.json({ ok: true, skillsDir: globalSkillsDir, skills: [], note: errorMessage(e) });
   }
 }

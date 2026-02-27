@@ -1,19 +1,11 @@
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 
 import { NextResponse } from "next/server";
 
+import { errorMessage } from "@/lib/errors";
 import { runOpenClaw } from "@/lib/openclaw";
-
-function normalizeId(kind: string, id: string) {
-  const s = String(id ?? "").trim();
-  if (!s) throw new Error(`${kind} is required`);
-  if (!/^[a-z0-9][a-z0-9-]{0,62}$/i.test(s)) {
-    throw new Error(`${kind} must match /^[a-z0-9][a-z0-9-]{0,62}$/i`);
-  }
-  return s;
-}
+import { normalizeId, resolveAgentWorkspace } from "@/lib/swarms";
 
 function escapeShValue(v: string) {
   // Keep it simple: wrap in double-quotes and escape backslash + double-quote + dollar.
@@ -53,18 +45,6 @@ function upsertExportLine(content: string, key: string, value: string) {
   }
 
   return out.join("\n");
-}
-
-async function resolveAgentWorkspace(agentId: string) {
-  const cfgPath = path.join(os.homedir(), ".openclaw", "openclaw.json");
-  const raw = await fs.readFile(cfgPath, "utf8");
-  const cfg = JSON.parse(raw) as { agents?: { defaults?: { workspace?: string } } };
-
-  const baseWorkspace = String(cfg?.agents?.defaults?.workspace ?? "").trim();
-  if (!baseWorkspace) throw new Error("agents.defaults.workspace not set");
-
-  // convention: ~/.openclaw/workspace-<id>
-  return path.resolve(baseWorkspace, "..", `workspace-${agentId}`);
 }
 
 export async function POST(req: Request) {
@@ -132,8 +112,8 @@ export async function POST(req: Request) {
         const sh = entries.filter((f) => f.endsWith(".sh"));
         for (const f of sh) {
           const p = path.join(dir, f);
-          // add +x for user (and group/other to match common dev perms)
-          await fs.chmod(p, 0o755);
+          // add +x for user/group/other (standard script perms)
+          await fs.chmod(p, 0o750);
         }
       } catch {
         // best-effort
@@ -141,8 +121,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ ok: true, orchestratorAgentId, workspace });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+  } catch (err: unknown) {
+    const msg = errorMessage(err);
     const status = /required|match \//i.test(msg) ? 400 : 500;
     return NextResponse.json({ ok: false, error: msg }, { status });
   }

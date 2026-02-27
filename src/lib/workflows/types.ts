@@ -9,8 +9,6 @@ export type WorkflowTriggerCronV1 = {
   tz?: string;
 };
 
-export type WorkflowTriggerV1 = WorkflowTriggerCronV1;
-
 export type WorkflowNodeV1 = {
   id: string;
   type:
@@ -43,7 +41,7 @@ export type WorkflowFileV1 = {
   name: string;
   version?: number;
   timezone?: string;
-  triggers?: WorkflowTriggerV1[];
+  triggers?: WorkflowTriggerCronV1[];
   nodes: WorkflowNodeV1[];
   edges: WorkflowEdgeV1[];
   meta?: Record<string, unknown>;

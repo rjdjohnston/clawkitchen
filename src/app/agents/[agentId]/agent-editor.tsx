@@ -1,8 +1,11 @@
 "use client";
 
-import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { errorMessage } from "@/lib/errors";
+import { fetchAll, fetchJson } from "@/lib/fetch-json";
+import { DeleteAgentModal } from "@/components/delete-modals";
+import { IdentityTab, ConfigTab, SkillsTab, FilesTab } from "./agent-editor-tabs";
 
 type AgentListItem = {
   id: string;
@@ -16,63 +19,73 @@ type FileListResponse = { ok?: boolean; files?: unknown[] };
 
 type FileEntry = { name: string; missing: boolean };
 
-function DeleteAgentModal({
-  open,
-  agentId,
-  busy,
-  error,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  agentId: string;
-  busy?: boolean;
-  error?: string | null;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  if (!open) return null;
+async function loadAgentFilesAndSkills(
+  agentId: string,
+  setters: {
+    setAgentFiles: (f: Array<FileEntry & { required?: boolean; rationale?: string }>) => void;
+    setSkillsList: (s: string[]) => void;
+    setAvailableSkills: (s: string[]) => void;
+    setSelectedSkill: (s: string) => void;
+    setAgentFilesLoading: (v: boolean) => void;
+    setSkillsLoading: (v: boolean) => void;
+  }
+): Promise<void> {
+  setters.setAgentFilesLoading(true);
+  setters.setSkillsLoading(true);
+  try {
+    const [filesRes, skillsRes, availableSkillsRes] = await fetchAll([
+      `/api/agents/files?agentId=${encodeURIComponent(agentId)}`,
+      `/api/agents/skills?agentId=${encodeURIComponent(agentId)}`,
+      "/api/skills/available",
+    ]);
 
-  return createPortal(
-    <div className="fixed inset-0 z-[200]">
-      <div className="fixed inset-0 bg-black/60" onClick={onClose} />
-      <div className="fixed inset-0 overflow-y-auto">
-        <div className="flex min-h-full items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[color:var(--ck-bg-glass-strong)] p-5 shadow-[var(--ck-shadow-2)]">
-            <div className="text-lg font-semibold text-[color:var(--ck-text-primary)]">Delete agent</div>
-            <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
-              Delete agent <code className="font-mono">{agentId}</code>? This will remove its workspace/state.
-            </p>
-
-            {error ? (
-              <div className="mt-4 rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">
-                {error}
-              </div>
-            ) : null}
-
-            <div className="mt-6 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onConfirm}
-                className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] hover:bg-[var(--ck-accent-red-hover)] disabled:opacity-50"
-              >
-                {busy ? "Deleting…" : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
+    let installedSkills: string[] = [];
+    try {
+      const filesJson = (await filesRes.json()) as FileListResponse;
+      if (filesRes.ok && filesJson.ok) {
+        const files = Array.isArray(filesJson.files) ? filesJson.files : [];
+        setters.setAgentFiles(
+          files.map((f) => {
+            const entry = f as { name?: unknown; missing?: unknown };
+            return {
+              name: String(entry.name ?? ""),
+              missing: Boolean(entry.missing),
+              required: Boolean((entry as { required?: unknown }).required),
+              rationale:
+                typeof (entry as { rationale?: unknown }).rationale === "string"
+                  ? ((entry as { rationale?: string }).rationale as string)
+                  : undefined,
+            };
+          }),
+        );
+      }
+    } catch {
+      // ignore
+    }
+    try {
+      const skillsJson = (await skillsRes.json()) as { ok?: boolean; skills?: unknown[] };
+      if (skillsRes.ok && skillsJson.ok) {
+        installedSkills = Array.isArray(skillsJson.skills) ? (skillsJson.skills as string[]) : [];
+        setters.setSkillsList(installedSkills);
+      }
+    } catch {
+      // ignore
+    }
+    try {
+      const availableSkillsJson = (await availableSkillsRes.json()) as { ok?: boolean; skills?: unknown[] };
+      if (availableSkillsRes.ok && availableSkillsJson.ok) {
+        const list = Array.isArray(availableSkillsJson.skills) ? (availableSkillsJson.skills as string[]) : [];
+        setters.setAvailableSkills(list);
+        const first = list.find((s) => !installedSkills.includes(s));
+        setters.setSelectedSkill(first ?? list[0] ?? "");
+      }
+    } catch {
+      // ignore
+    }
+  } finally {
+    setters.setAgentFilesLoading(false);
+    setters.setSkillsLoading(false);
+  }
 }
 
 export default function AgentEditor({ agentId, returnTo }: { agentId: string; returnTo?: string }) {
@@ -119,126 +132,66 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
       setLoading(true);
       setPageMsg("");
       try {
-        const agentsRes = await fetch("/api/agents", { cache: "no-store" });
-        const agentsJson = (await agentsRes.json()) as { agents?: unknown[] };
+        const agentsJson = await fetchJson<{ agents?: unknown[] }>("/api/agents", { cache: "no-store" });
         const list = Array.isArray(agentsJson.agents) ? (agentsJson.agents as AgentListItem[]) : [];
         const found = list.find((a) => a.id === agentId) ?? null;
         setAgent(found);
         setName(found?.identityName ?? "");
         setModel(found?.model ?? "");
 
-        // Render ASAP; load files/skills in the background.
         setLoading(false);
 
-        void (async () => {
-          setAgentFilesLoading(true);
-          setSkillsLoading(true);
-
-          try {
-            const [filesRes, skillsRes, availableSkillsRes] = await Promise.all([
-              fetch(`/api/agents/files?agentId=${encodeURIComponent(agentId)}`, { cache: "no-store" }),
-              fetch(`/api/agents/skills?agentId=${encodeURIComponent(agentId)}`, { cache: "no-store" }),
-              fetch("/api/skills/available", { cache: "no-store" }),
-            ]);
-
-            let installedSkills: string[] = [];
-
-            try {
-              const filesJson = (await filesRes.json()) as FileListResponse;
-              if (filesRes.ok && filesJson.ok) {
-                const files = Array.isArray(filesJson.files) ? filesJson.files : [];
-                setAgentFiles(
-                  files.map((f) => {
-                    const entry = f as { name?: unknown; missing?: unknown };
-                    return {
-                      name: String(entry.name ?? ""),
-                      missing: Boolean(entry.missing),
-                      required: Boolean((entry as { required?: unknown }).required),
-                      rationale:
-                        typeof (entry as { rationale?: unknown }).rationale === "string"
-                          ? ((entry as { rationale?: string }).rationale as string)
-                          : undefined,
-                    };
-                  }),
-                );
-              }
-            } catch {
-              // ignore
-            }
-
-            try {
-              const skillsJson = (await skillsRes.json()) as { ok?: boolean; skills?: unknown[] };
-              if (skillsRes.ok && skillsJson.ok) {
-                installedSkills = Array.isArray(skillsJson.skills) ? (skillsJson.skills as string[]) : [];
-                setSkillsList(installedSkills);
-              }
-            } catch {
-              // ignore
-            }
-
-            try {
-              const availableSkillsJson = (await availableSkillsRes.json()) as { ok?: boolean; skills?: unknown[] };
-              if (availableSkillsRes.ok && availableSkillsJson.ok) {
-                const list = Array.isArray(availableSkillsJson.skills) ? (availableSkillsJson.skills as string[]) : [];
-                setAvailableSkills(list);
-                // Default select first available skill not already installed.
-                const first = list.find((s) => !installedSkills.includes(s));
-                setSelectedSkill(first ?? list[0] ?? "");
-              }
-            } catch {
-              // ignore
-            }
-          } finally {
-            setAgentFilesLoading(false);
-            setSkillsLoading(false);
-          }
-        })();
+        void loadAgentFilesAndSkills(agentId, {
+          setAgentFiles,
+          setSkillsList,
+          setAvailableSkills,
+          setSelectedSkill,
+          setAgentFilesLoading,
+          setSkillsLoading,
+        });
       } catch (e: unknown) {
-        setPageMsg(e instanceof Error ? e.message : String(e));
+        setPageMsg(errorMessage(e));
       } finally {
-        // If the happy-path already flipped loading=false early, this is a no-op.
         setLoading(false);
       }
     })();
   }, [agentId]);
 
-  async function onSaveIdentity() {
+  async function withSaveFeedback(
+    fn: () => Promise<string>,
+  ) {
     setSaving(true);
     setPageMsg("");
     try {
-      const res = await fetch("/api/agents/identity", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ agentId, name, emoji, theme, avatar }),
-      });
-      const json = (await res.json()) as { message?: string; error?: string };
-      if (!res.ok) throw new Error(json.message || json.error || "Save failed");
-      setPageMsg("Saved identity via openclaw agents set-identity");
+      const msg = await fn();
+      setPageMsg(msg);
     } catch (e: unknown) {
-      setPageMsg(e instanceof Error ? e.message : String(e));
+      setPageMsg(errorMessage(e));
     } finally {
       setSaving(false);
     }
   }
 
-  async function onSaveConfig() {
-    setSaving(true);
-    setPageMsg("");
+  async function onSaveIdentity() {
+    await withSaveFeedback(async () => {
+      await fetchJson("/api/agents/identity", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ agentId, name, emoji, theme, avatar }),
+      });
+      return "Saved identity via openclaw agents set-identity";
+    });
+  }
 
-    try {
-      const res = await fetch("/api/agents/update", {
+  async function onSaveConfig() {
+    await withSaveFeedback(async () => {
+      await fetchJson("/api/agents/update", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ agentId, patch: { model } }),
       });
-      const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error || "Save config failed");
-      setPageMsg("Saved agent config (model) and restarted gateway");
-    } catch (e: unknown) {
-      setPageMsg(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
+      return "Saved agent config (model) and restarted gateway";
+    });
   }
 
   async function onLoadAgentFile(nextName: string) {
@@ -250,15 +203,14 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
     setLoadingFile(true);
     setFileError("");
     try {
-      const res = await fetch(
+      const json = await fetchJson<{ ok?: boolean; content?: string }>(
         `/api/agents/file?agentId=${encodeURIComponent(agentId)}&name=${encodeURIComponent(nextName)}`,
         { cache: "no-store" },
       );
-      const json = (await res.json()) as { ok?: boolean; error?: string; content?: string };
-      if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load file");
+      if (!json.ok) throw new Error("Failed to load file");
       setFileContent(String(json.content ?? ""));
     } catch (e: unknown) {
-      setFileError(e instanceof Error ? e.message : String(e));
+      setFileError(errorMessage(e));
     } finally {
       setLoadingFile(false);
     }
@@ -282,7 +234,7 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
     if (!fileContent) {
       onLoadAgentFile(target);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Load file when entering Files tab; onLoadAgentFile and fileContent intentionally omitted.
   }, [activeTab, agentId, agentFiles.length]);
 
   function defaultFileContent(name: string) {
@@ -312,23 +264,26 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
     setSaving(true);
     setFileError("");
     try {
-      const res = await fetch("/api/agents/file", {
+      const json = await fetchJson<{ ok?: boolean }>("/api/agents/file", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ agentId, name: fileName, content: fileContent }),
       });
-      const json = (await res.json()) as { ok?: boolean; error?: string };
-      if (!res.ok || !json.ok) throw new Error(json.error || "Failed to save file");
+      if (!json.ok) throw new Error("Failed to save file");
 
       // Refresh the file list so missing/mtime updates immediately.
-      const r = await fetch(`/api/agents/files?agentId=${encodeURIComponent(agentId)}`, { cache: "no-store" });
-      const j = await r.json();
-      if (r.ok && j.ok && Array.isArray(j.files)) {
-        setAgentFiles(j.files);
+      try {
+        const j = await fetchJson<{ ok?: boolean; files?: Array<FileEntry & { required?: boolean; rationale?: string }> }>(
+          `/api/agents/files?agentId=${encodeURIComponent(agentId)}`,
+          { cache: "no-store" },
+        );
+        if (j.ok && Array.isArray(j.files)) setAgentFiles(j.files);
+      } catch {
+        // ignore
       }
       // No-op: saving a file doesn't need a global notice.
     } catch (e: unknown) {
-      setFileError(e instanceof Error ? e.message : String(e));
+      setFileError(errorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -347,13 +302,11 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
     setPageMsg("");
 
     try {
-      const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}`, { method: "DELETE" });
-      const json = (await res.json()) as { ok?: boolean; error?: string; message?: string; stderr?: string };
-      if (!res.ok || !json.ok) throw new Error(json.error || json.message || json.stderr || "Delete failed");
+      await fetchJson(`/api/agents/${encodeURIComponent(agentId)}`, { method: "DELETE" });
 
       window.location.href = "/";
     } catch (e: unknown) {
-      setDeleteError(e instanceof Error ? e.message : String(e));
+      setDeleteError(errorMessage(e));
       setDeleteBusy(false);
     }
   }
@@ -420,267 +373,86 @@ export default function AgentEditor({ agentId, returnTo }: { agentId: string; re
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4">
-        {activeTab === "identity" ? (
-          <div className="ck-glass-strong p-4">
-            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Identity</div>
-
-            <label className="mt-3 block text-xs font-medium text-[color:var(--ck-text-secondary)]">Name</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-            />
-
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div>
-                <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Emoji</label>
-                <input
-                  value={emoji}
-                  onChange={(e) => setEmoji(e.target.value)}
-                  placeholder="🦞"
-                  className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Theme</label>
-                <input
-                  value={theme}
-                  onChange={(e) => setTheme(e.target.value)}
-                  placeholder="warm, sharp, calm"
-                  className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[color:var(--ck-text-secondary)]">Avatar</label>
-                <input
-                  value={avatar}
-                  onChange={(e) => setAvatar(e.target.value)}
-                  placeholder="avatars/openclaw.png"
-                  className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-                />
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <button
-                disabled={saving}
-                onClick={onSaveIdentity}
-                className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] transition-colors hover:bg-[var(--ck-accent-red-hover)] active:bg-[var(--ck-accent-red-active)] disabled:opacity-50"
-              >
-                {saving ? "Saving…" : "Save"}
-              </button>
-              {returnTo ? (
-                <button
-                  disabled={saving}
-                  onClick={async () => {
-                    await onSaveIdentity();
-                    router.push(returnTo);
-                  }}
-                  className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-white/10 active:bg-white/15 disabled:opacity-50"
-                >
-                  Save & return
-                </button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        {activeTab === "config" ? (
-          <div className="ck-glass-strong p-4">
-            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Config</div>
-            <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
-              Thin slice: edit the configured model id for this agent (writes to OpenClaw config).
-            </p>
-            <label className="mt-3 block text-xs font-medium text-[color:var(--ck-text-secondary)]">Model</label>
-            <input
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder="openai/gpt-5.2"
-              className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-            />
-            <div className="mt-3">
-              <button
-                disabled={saving}
-                onClick={onSaveConfig}
-                className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
-              >
-                {saving ? "Saving…" : "Save config"}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {activeTab === "skills" ? (
-          <div className="ck-glass-strong p-4">
-            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Skills</div>
-            <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
-              Skills installed in this <strong>agent</strong> workspace (<code>skills/</code>). If you want a skill available to all agents,
-              add it at the team level.
-            </p>
-
-            <div className="mt-4">
-              <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Installed</div>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[color:var(--ck-text-secondary)]">
-                {skillsLoading ? (
-                  <li>Loading…</li>
-                ) : skillsList.length ? (
-                  skillsList.map((s) => <li key={s}>{s}</li>)
-                ) : (
-                  <li>None installed.</li>
-                )}
-              </ul>
-            </div>
-
-            <div className="mt-5 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15 p-3">
-              <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Add a skill</div>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-                <select
-                  value={selectedSkill}
-                  onChange={(e) => setSelectedSkill(e.target.value)}
-                  className="w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-                  disabled={installingSkill || !availableSkills.length}
-                >
-                  {availableSkills.length ? (
-                    availableSkills.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="">No skills found</option>
-                  )}
-                </select>
-                <button
-                  type="button"
-                  disabled={installingSkill || !selectedSkill}
-                  onClick={async () => {
-                    setInstallingSkill(true);
-                    setSkillMsg("");
-                    setSkillError("");
-                    try {
-                      const res = await fetch("/api/agents/skills/install", {
-                        method: "POST",
-                        headers: { "content-type": "application/json" },
-                        body: JSON.stringify({ agentId, skill: selectedSkill }),
-                      });
-                      const json = await res.json();
-                      if (!res.ok || !json.ok) throw new Error(json.error || "Failed to install skill");
-                      setSkillMsg(`Installed skill: ${selectedSkill}`);
-                      // Refresh installed list.
-                      const r = await fetch(`/api/agents/skills?agentId=${encodeURIComponent(agentId)}`, { cache: "no-store" });
-                      const j = await r.json();
-                      if (r.ok && j.ok) setSkillsList(Array.isArray(j.skills) ? j.skills : []);
-                    } catch (e: unknown) {
-                      setSkillError(e instanceof Error ? e.message : String(e));
-                    } finally {
-                      setInstallingSkill(false);
-                    }
-                  }}
-                  className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
-                >
-                  {installingSkill ? "Adding…" : "Add"}
-                </button>
-              </div>
-
-              {skillError ? (
-                <div className="mt-3 rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">
-                  {skillError}
-                </div>
-              ) : skillMsg ? (
-                <div className="mt-3 rounded-[var(--ck-radius-sm)] border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
-                  {skillMsg}
-                </div>
-              ) : null}
-
-              <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
-                This uses <code>openclaw recipes install-skill &lt;skill&gt; --agent-id {agentId} --yes</code>.
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {activeTab === "files" ? (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="ck-glass-strong p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Agent files</div>
-                <label className="flex items-center gap-2 text-xs text-[color:var(--ck-text-secondary)]">
-                  <input type="checkbox" checked={showOptionalFiles} onChange={(e) => setShowOptionalFiles(e.target.checked)} />
-                  Show optional
-                </label>
-              </div>
-              <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">Default view hides optional missing files to reduce noise.</div>
-              <ul className="mt-3 space-y-1">
-                {agentFilesLoading ? (
-                  <li className="text-sm text-[color:var(--ck-text-secondary)]">Loading…</li>
-                ) : null}
-                {agentFiles
-                  .filter((f) => (showOptionalFiles ? true : Boolean(f.required) || !f.missing))
-                  .map((f) => (
-                    <li key={f.name}>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => onLoadAgentFile(f.name)}
-                          className={
-                            fileName === f.name
-                              ? "w-full rounded-[var(--ck-radius-sm)] bg-white/10 px-3 py-2 text-left text-sm text-[color:var(--ck-text-primary)]"
-                              : "w-full rounded-[var(--ck-radius-sm)] px-3 py-2 text-left text-sm text-[color:var(--ck-text-secondary)] hover:bg-white/5"
-                          }
-                        >
-                          <span className={f.required ? "text-[color:var(--ck-text-primary)]" : "text-[color:var(--ck-text-secondary)]"}>
-                            {f.name}
-                          </span>
-                          <span className="ml-2 text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">
-                            {f.required ? "required" : "optional"}
-                          </span>
-                          {f.missing ? <span className="ml-2 text-xs text-[color:var(--ck-text-tertiary)]">missing</span> : null}
-                        </button>
-                        {f.missing ? (
-                          <button
-                            type="button"
-                            disabled={saving}
-                            onClick={() => void onCreateMissingFile(f.name)}
-                            className="shrink-0 rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10 disabled:opacity-50"
-                          >
-                            Create
-                          </button>
-                        ) : null}
-                      </div>
-                    </li>
-                  ))}
-              </ul>
-            </div>
-
-            <div className="ck-glass-strong p-4 lg:col-span-2">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Edit: {fileName}</div>
-                <div className="flex items-center gap-3">
-                  {loadingFile ? <span className="text-xs text-[color:var(--ck-text-tertiary)]">Loading…</span> : null}
-                  <button
-                    disabled={saving}
-                    onClick={onSaveAgentFile}
-                    className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
-                  >
-                    {saving ? "Saving…" : "Save file"}
-                  </button>
-                </div>
-              </div>
-
-              {fileError ? (
-                <div className="mt-3 rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">
-                  {fileError}
-                </div>
-              ) : null}
-
-              <textarea
-                value={fileContent}
-                onChange={(e) => setFileContent(e.target.value)}
-                className="mt-3 h-[55vh] w-full resize-none rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-3 font-mono text-xs text-[color:var(--ck-text-primary)]"
-                spellCheck={false}
-              />
-            </div>
-          </div>
-        ) : null}
+        {activeTab === "identity" && (
+          <IdentityTab
+            name={name}
+            emoji={emoji}
+            theme={theme}
+            avatar={avatar}
+            saving={saving}
+            returnTo={returnTo}
+            onNameChange={setName}
+            onEmojiChange={setEmoji}
+            onThemeChange={setTheme}
+            onAvatarChange={setAvatar}
+            onSave={onSaveIdentity}
+            router={router}
+          />
+        )}
+        {activeTab === "config" && (
+          <ConfigTab
+            model={model}
+            saving={saving}
+            onModelChange={setModel}
+            onSave={onSaveConfig}
+          />
+        )}
+        {activeTab === "skills" && (
+          <SkillsTab
+            agentId={agentId}
+            skillsList={skillsList}
+            availableSkills={availableSkills}
+            skillsLoading={skillsLoading}
+            selectedSkill={selectedSkill}
+            installingSkill={installingSkill}
+            skillError={skillError}
+            skillMsg={skillMsg}
+            onSelectedSkillChange={setSelectedSkill}
+            onInstallSkill={async () => {
+              setInstallingSkill(true);
+              setSkillMsg("");
+              setSkillError("");
+              try {
+                await fetchJson("/api/agents/skills/install", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ agentId, skill: selectedSkill }),
+                });
+                setSkillMsg(`Installed skill: ${selectedSkill}`);
+                try {
+                  const j = await fetchJson<{ ok?: boolean; skills?: string[] }>(
+                    `/api/agents/skills?agentId=${encodeURIComponent(agentId)}`,
+                    { cache: "no-store" },
+                  );
+                  if (j.ok && Array.isArray(j.skills)) setSkillsList(j.skills);
+                } catch {
+                  // ignore
+                }
+              } catch (e: unknown) {
+                setSkillError(errorMessage(e));
+              } finally {
+                setInstallingSkill(false);
+              }
+            }}
+          />
+        )}
+        {activeTab === "files" && (
+          <FilesTab
+            agentFiles={agentFiles}
+            agentFilesLoading={agentFilesLoading}
+            showOptionalFiles={showOptionalFiles}
+            fileName={fileName}
+            fileContent={fileContent}
+            loadingFile={loadingFile}
+            saving={saving}
+            fileError={fileError}
+            onShowOptionalChange={setShowOptionalFiles}
+            onLoadFile={onLoadAgentFile}
+            onFileContentChange={setFileContent}
+            onSaveFile={onSaveAgentFile}
+            onCreateMissingFile={onCreateMissingFile}
+          />
+        )}
       </div>
 
       <DeleteAgentModal

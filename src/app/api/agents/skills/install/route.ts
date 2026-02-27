@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runOpenClaw } from "@/lib/openclaw";
 import { parseTeamRoleWorkspace } from "@/lib/agent-workspace";
+import { installSkillErrorResponse } from "@/lib/api-route-helpers";
 
 export async function POST(req: Request) {
   const body = (await req.json()) as { agentId?: string; skill?: string };
@@ -27,20 +28,7 @@ export async function POST(req: Request) {
   }
 
   const res = await runOpenClaw(args);
-  if (!res.ok) {
-    const stdout = res.stdout?.trim();
-    const stderr = res.stderr?.trim();
-    return NextResponse.json(
-      {
-        ok: false,
-        error: stderr || stdout || `openclaw ${args.join(" ")} failed (exit=${res.exitCode})`,
-        stdout: res.stdout,
-        stderr: res.stderr,
-        scopeArgs: args,
-      },
-      { status: 500 },
-    );
-  }
+  if (!res.ok) return installSkillErrorResponse(args, res, { scopeArgs: args });
 
   return NextResponse.json({ ok: true, agentId, skill, scopeArgs: args, stdout: res.stdout, stderr: res.stderr });
 }

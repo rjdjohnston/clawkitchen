@@ -7,11 +7,32 @@ export type OpenClawExecResult = {
   stderr: string;
 };
 
-export async function runOpenClaw(args: string[]): Promise<OpenClawExecResult> {
-  // Avoid child_process usage in plugin code (triggers OpenClaw install-time safety warnings).
-  // Delegate to the OpenClaw runtime helper instead.
-  const api = getKitchenApi();
+function extractStdout(err: { stdout?: unknown }): string {
+  if (typeof err.stdout === "string") return err.stdout;
+  if (err.stdout && typeof err.stdout === "object" && "toString" in err.stdout) {
+    return String((err.stdout as { toString: () => string }).toString());
+  }
+  return "";
+}
 
+function resolveExitCode(res: { exitCode?: unknown; code?: unknown; status?: unknown }): number {
+  if (typeof res.exitCode === "number") return res.exitCode;
+  if (typeof res.code === "number") return res.code;
+  if (typeof res.status === "number") return res.status;
+  return 0;
+}
+
+function extractStderr(err: { stderr?: unknown; message?: unknown }, fallback: unknown): string {
+  if (typeof err.stderr === "string") return err.stderr;
+  if (err.stderr && typeof err.stderr === "object" && "toString" in err.stderr) {
+    return String((err.stderr as { toString: () => string }).toString());
+  }
+  if (typeof err.message === "string") return err.message;
+  return String(fallback);
+}
+
+export async function runOpenClaw(args: string[]): Promise<OpenClawExecResult> {
+  const api = getKitchenApi();
   try {
     const res = (await api.runtime.system.runCommandWithTimeout(["openclaw", ...args], { timeoutMs: 120000 })) as {
       stdout?: unknown;
@@ -23,22 +44,16 @@ export async function runOpenClaw(args: string[]): Promise<OpenClawExecResult> {
 
     const stdout = String(res.stdout ?? "");
     const stderr = String(res.stderr ?? "");
-    const exitCode =
-      typeof res.exitCode === "number"
-        ? res.exitCode
-        : typeof res.code === "number"
-          ? res.code
-          : typeof res.status === "number"
-            ? res.status
-            : 0;
+    const exitCode = resolveExitCode(res);
+
 
     if (exitCode !== 0) return { ok: false, exitCode, stdout, stderr };
     return { ok: true, exitCode: 0, stdout, stderr };
   } catch (e: unknown) {
     const err = e as { code?: unknown; stdout?: unknown; stderr?: unknown; message?: unknown };
     const exitCode = typeof err.code === "number" ? err.code : 1;
-    const stdout = typeof err.stdout === "string" ? err.stdout : "";
-    const stderr = typeof err.stderr === "string" ? err.stderr : typeof err.message === "string" ? err.message : String(e);
+    const stdout = extractStdout(err);
+    const stderr = extractStderr(err, e);
     return { ok: false, exitCode, stdout, stderr };
   }
 }

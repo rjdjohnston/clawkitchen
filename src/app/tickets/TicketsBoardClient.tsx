@@ -2,6 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { errorMessage } from "@/lib/errors";
+import { fetchJson } from "@/lib/fetch-json";
 import type { TicketStage, TicketSummary } from "@/lib/tickets";
 
 const STAGES: { key: TicketStage; label: string }[] = [
@@ -109,16 +111,11 @@ export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
 
   async function move(ticket: TicketSummary, to: TicketStage) {
     setError(null);
-    const res = await fetch("/api/tickets/move", {
+    await fetchJson("/api/tickets/move", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ticket: ticket.id, to }),
     });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data?.error ?? `Move failed (${res.status})`);
-    }
   }
 
   return (
@@ -282,7 +279,7 @@ export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
                   startTransition(() => {
                     move(payload.ticket, payload.to)
                       .then(() => router.refresh())
-                      .catch((err) => setError(err.message));
+                      .catch((err: unknown) => setError(errorMessage(err)));
                   });
                 }}
                 disabled={isPending}

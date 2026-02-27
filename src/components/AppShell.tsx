@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { fetchJson } from "@/lib/fetch-json";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ToastProvider } from "@/components/ToastProvider";
 
@@ -88,8 +90,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/agents", { cache: "no-store" });
-        const json = await res.json();
+        const json = await fetchJson<{ agents?: Array<{ workspace?: string }> }>("/api/agents", { cache: "no-store" });
         const agents = Array.isArray(json.agents)
           ? (json.agents as Array<{ workspace?: string }> )
           : [];
@@ -241,7 +242,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <nav className="min-h-0 flex-1 overflow-auto p-2">
-            <div className={collapsed ? "mt-2 px-2 pb-2 pt-2" : "mt-2 px-2 pb-2 pt-2"}>
+            <div className="mt-2 px-2 pb-2 pt-2">
               {/* section label intentionally omitted */}
             </div>
             {globalNav.map((it) => (
@@ -275,7 +276,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </aside>
 
         <div className="min-w-0 flex-1">
-          <main className="h-full overflow-auto p-4 md:p-6">{children}</main>
+          <main className="h-full overflow-auto p-4 md:p-6">
+            <ErrorBoundary>{children}</ErrorBoundary>
+          </main>
         </div>
       </div>
     </ToastProvider>

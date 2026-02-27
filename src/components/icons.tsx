@@ -1,6 +1,6 @@
 "use client";
 
-export function SunIcon({ className }: { className?: string }) {
+function IconSvg({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
     <svg
       className={className}
@@ -9,6 +9,14 @@ export function SunIcon({ className }: { className?: string }) {
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
+      {children}
+    </svg>
+  );
+}
+
+export function SunIcon({ className }: { className?: string }) {
+  return (
+    <IconSvg className={className}>
       <path
         d="M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z"
         stroke="currentColor"
@@ -22,25 +30,19 @@ export function SunIcon({ className }: { className?: string }) {
       <path d="M18 18l1.8 1.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <path d="M18 6l1.8-1.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <path d="M4.2 19.8 6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
+    </IconSvg>
   );
 }
 
 export function MoonIcon({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
+    <IconSvg className={className}>
       <path
         d="M21 14.2A7.8 7.8 0 0 1 9.8 3a7 7 0 1 0 11.2 11.2Z"
         stroke="currentColor"
         strokeWidth="1.8"
         strokeLinejoin="round"
       />
-    </svg>
+    </IconSvg>
   );
 }

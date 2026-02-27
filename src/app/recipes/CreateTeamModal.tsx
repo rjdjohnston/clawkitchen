@@ -1,16 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
-
-function slugifyId(input: string) {
-  return String(input ?? "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/--+/g, "-");
-}
+import { useState } from "react";
+import { useSlugifiedId } from "@/lib/use-slugified-id";
+import { CreateModalShell } from "./CreateModalShell";
 
 export function CreateTeamModal({
   open,
@@ -40,103 +32,60 @@ export function CreateTeamModal({
   const [teamName, setTeamName] = useState("");
   const [idTouched, setIdTouched] = useState(false);
 
-  const derivedId = useMemo(() => slugifyId(teamName), [teamName]);
-  const effectiveId = idTouched ? teamId : derivedId;
+  const { effectiveId } = useSlugifiedId({
+    open,
+    name: teamName,
+    setName: setTeamName,
+    id: teamId,
+    setId: setTeamId,
+    idTouched,
+    setIdTouched,
+  });
 
-  // Keep parent state in sync so the confirm handler uses the effective id.
-  useEffect(() => {
-    if (!open) return;
-    if (!idTouched) setTeamId(derivedId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [derivedId, open, idTouched]);
+  return (
+    <CreateModalShell
+      open={open}
+      title="Create team"
+      recipeId={recipeId}
+      recipeName={recipeName}
+      error={error}
+      busy={busy}
+      canConfirm={!!effectiveId.trim()}
+      onClose={onClose}
+      onConfirm={onConfirm}
+      confirmLabel="Create team"
+    >
+      <div className="mt-4">
+        <label className="text-sm font-medium text-[color:var(--ck-text-primary)]">Team name</label>
+        <input
+          value={teamName}
+          onChange={(e) => setTeamName(e.target.value)}
+          placeholder="e.g. Crypto Team"
+          className="mt-2 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)]"
+          autoFocus
+        />
+      </div>
 
-  // Reset modal-local state when opened.
-  useEffect(() => {
-    if (!open) return;
-    setIdTouched(false);
-    setTeamName("");
-    setTeamId("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  if (!open) return null;
-
-  return createPortal(
-    <div className="fixed inset-0 z-[200]">
-      <div className="fixed inset-0 bg-black/60" onClick={onClose} />
-      <div className="fixed inset-0 overflow-y-auto">
-        <div className="flex min-h-full items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[color:var(--ck-bg-glass-strong)] p-5 shadow-[var(--ck-shadow-2)]">
-            <div className="text-lg font-semibold text-[color:var(--ck-text-primary)]">Create team</div>
-            <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
-              Create a new team from recipe <code className="font-mono">{recipeId}</code>
-              {recipeName ? (
-                <>
-                  {" "}(<span className="font-medium">{recipeName}</span>)
-                </>
-              ) : null}
-              .
-            </p>
-
-            <div className="mt-4">
-              <label className="text-sm font-medium text-[color:var(--ck-text-primary)]">Team name</label>
-              <input
-                value={teamName}
-                onChange={(e) => setTeamName(e.target.value)}
-                placeholder="e.g. Crypto Team"
-                className="mt-2 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)]"
-                autoFocus
-              />
-            </div>
-
-            <div className="mt-4">
-              <label className="text-sm font-medium text-[color:var(--ck-text-primary)]">Team id</label>
-              <input
-                value={effectiveId}
-                onChange={(e) => {
-                  setIdTouched(true);
-                  setTeamId(e.target.value);
-                }}
-                placeholder="e.g. my-team"
-                className="mt-2 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)]"
-              />
-              <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
-                This will scaffold ~/.openclaw/workspace-&lt;teamId&gt; and add the team to config.
-              </div>
-            </div>
-
-            <label className="mt-4 flex items-center gap-2 text-sm text-[color:var(--ck-text-secondary)]">
-              <input type="checkbox" checked={installCron} onChange={(e) => setInstallCron(e.target.checked)} />
-              Install cron jobs from this recipe
-            </label>
-
-            {error ? (
-              <div className="mt-4 rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">
-                {error}
-              </div>
-            ) : null}
-
-            <div className="mt-6 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={busy || !effectiveId.trim()}
-                onClick={onConfirm}
-                className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] hover:bg-[var(--ck-accent-red-hover)] disabled:opacity-50"
-              >
-                {busy ? "Creating…" : "Create team"}
-              </button>
-            </div>
-          </div>
+      <div className="mt-4">
+        <label className="text-sm font-medium text-[color:var(--ck-text-primary)]">Team id</label>
+        <input
+          value={effectiveId}
+          onChange={(e) => {
+            setIdTouched(true);
+            setTeamId(e.target.value);
+          }}
+          placeholder="e.g. my-team"
+          className="mt-2 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)]"
+        />
+        <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
+          This will scaffold ~/.openclaw/workspace-&lt;teamId&gt; and add the team to config.
         </div>
       </div>
-    </div>,
-    document.body,
+
+      <label className="mt-4 flex items-center gap-2 text-sm text-[color:var(--ck-text-secondary)]">
+        <input type="checkbox" checked={installCron} onChange={(e) => setInstallCron(e.target.checked)} />
+        Install cron jobs from this recipe
+      </label>
+    </CreateModalShell>
   );
 }

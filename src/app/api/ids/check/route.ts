@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runOpenClaw } from "@/lib/openclaw";
+import { errorMessage } from "@/lib/errors";
 import { readOpenClawConfig } from "@/lib/paths";
 
 type Kind = "team" | "agent";
@@ -20,6 +21,20 @@ function normalizeId(v: unknown) {
   return String(v ?? "").trim();
 }
 
+function parseIdsFromJson(stdout: string): Set<string> {
+  const ids = new Set<string>();
+  try {
+    const items = JSON.parse(stdout) as Array<{ id?: unknown }>;
+    for (const item of items) {
+      const id = normalizeId(item.id);
+      if (id) ids.add(id);
+    }
+  } catch {
+    // ignore
+  }
+  return ids;
+}
+
 async function getSnapshot(): Promise<Snapshot> {
   const now = Date.now();
   if (snapshot && now - snapshot.atMs < SNAPSHOT_TTL_MS) return snapshot;
@@ -31,31 +46,8 @@ async function getSnapshot(): Promise<Snapshot> {
       runOpenClaw(["agents", "list", "--json"]),
     ]);
 
-    const recipeIds = new Set<string>();
-    if (recipesRes.ok) {
-      try {
-        const items = JSON.parse(recipesRes.stdout) as Array<{ id?: unknown }>;
-        for (const r of items) {
-          const id = normalizeId(r.id);
-          if (id) recipeIds.add(id);
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    const agentIds = new Set<string>();
-    if (agentsRes.ok) {
-      try {
-        const items = JSON.parse(agentsRes.stdout) as Array<{ id?: unknown }>;
-        for (const a of items) {
-          const id = normalizeId(a.id);
-          if (id) agentIds.add(id);
-        }
-      } catch {
-        // ignore
-      }
-    }
+    const recipeIds = recipesRes.ok ? parseIdsFromJson(recipesRes.stdout) : new Set<string>();
+    const agentIds = agentsRes.ok ? parseIdsFromJson(agentsRes.stdout) : new Set<string>();
 
     const s: Snapshot = { atMs: now, recipeIds, agentIds };
     snapshot = s;
@@ -114,7 +106,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: true, available: true });
   } catch (e: unknown) {
     return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      { ok: false, error: errorMessage(e) },
       { status: 500 },
     );
   }

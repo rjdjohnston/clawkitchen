@@ -2,8 +2,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 
-import { runOpenClaw } from "@/lib/openclaw";
+import { errorMessage } from "@/lib/errors";
 import { getKitchenApi } from "@/lib/kitchen-api";
+import { runOpenClaw } from "@/lib/openclaw";
 
 type AgentListItem = {
   id: string;
@@ -210,9 +211,6 @@ export async function GET(req: Request) {
       settingsPaths,
     });
   } catch (e: unknown) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return NextResponse.json({ ok: false, error: errorMessage(e) }, { status: 500 });
   }
 }

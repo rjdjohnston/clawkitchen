@@ -102,6 +102,29 @@ async function stopKitchen(api: OpenClawPluginApi) {
   api.logger.info("[kitchen] stopped");
 }
 
+function fetchHealthJson(healthUrl: string): Promise<{ ok?: boolean; startedAt?: unknown }> {
+  return new Promise<{ ok?: boolean; startedAt?: unknown }>((resolve, reject) => {
+    const req = http.get(healthUrl, (res) => {
+      const status = res.statusCode || 0;
+      let buf = "";
+      res.setEncoding("utf8");
+      res.on("data", (d) => (buf += d));
+      res.on("end", () => {
+        if (status < 200 || status >= 300) {
+          reject(new Error(`healthz returned HTTP ${status}`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(buf));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+    req.on("error", reject);
+  });
+}
+
 const kitchenPlugin = {
   id: "kitchen",
   name: "ClawKitchen",
@@ -139,26 +162,7 @@ const kitchenPlugin = {
             } = { ok: true, running: false, url, startedAt: null };
 
             try {
-              const json = await new Promise<{ ok?: boolean; startedAt?: unknown }>((resolve, reject) => {
-                const req = http.get(healthUrl, (res) => {
-                  const status = res.statusCode || 0;
-                  let buf = "";
-                  res.setEncoding("utf8");
-                  res.on("data", (d) => (buf += d));
-                  res.on("end", () => {
-                    if (status < 200 || status >= 300) {
-                      reject(new Error(`healthz returned HTTP ${status}`));
-                      return;
-                    }
-                    try {
-                      resolve(JSON.parse(buf));
-                    } catch (e) {
-                      reject(e);
-                    }
-                  });
-                });
-                req.on("error", reject);
-              });
+              const json = await fetchHealthJson(healthUrl);
 
               result.running = Boolean(json.ok);
               result.startedAt = typeof json.startedAt === "string" ? json.startedAt : null;

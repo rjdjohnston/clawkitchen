@@ -4,28 +4,9 @@ import path from "node:path";
 
 import { NextResponse } from "next/server";
 
+import { errorMessage } from "@/lib/errors";
 import { getKitchenApi } from "@/lib/kitchen-api";
-
-function normalizeId(kind: string, id: string) {
-  const s = String(id ?? "").trim();
-  if (!s) throw new Error(`${kind} is required`);
-  if (!/^[a-z0-9][a-z0-9-]{0,62}$/i.test(s)) {
-    throw new Error(`${kind} must match /^[a-z0-9][a-z0-9-]{0,62}$/i`);
-  }
-  return s;
-}
-
-async function resolveOrchestratorWorkspace(orchestratorAgentId: string) {
-  const cfgPath = path.join(os.homedir(), ".openclaw", "openclaw.json");
-  const raw = await fs.readFile(cfgPath, "utf8");
-  const cfg = JSON.parse(raw) as { agents?: { defaults?: { workspace?: string } } };
-
-  const baseWorkspace = String(cfg?.agents?.defaults?.workspace ?? "").trim();
-  if (!baseWorkspace) throw new Error("agents.defaults.workspace not set");
-
-  // convention: ~/.openclaw/workspace-<id>
-  return path.resolve(baseWorkspace, "..", `workspace-${orchestratorAgentId}`);
-}
+import { normalizeId, resolveAgentWorkspace } from "@/lib/swarms";
 
 export async function POST(req: Request) {
   try {
@@ -53,7 +34,7 @@ export async function POST(req: Request) {
       throw new Error("Provide exactly one of spec or specFile");
     }
 
-    const orchestratorWs = await resolveOrchestratorWorkspace(orchestratorAgentId);
+    const orchestratorWs = await resolveAgentWorkspace(orchestratorAgentId);
     const cliPath = path.join(orchestratorWs, ".clawdbot", "task.sh");
 
     // Prefer spec-file to avoid shell quoting surprises.
@@ -104,15 +85,16 @@ export async function POST(req: Request) {
     const api = getKitchenApi();
     const res = await api.runtime.system.runCommandWithTimeout(args, { timeoutMs });
 
-    // best-effort tmp cleanup
+    // best-effort tmp cleanup (fire-and-forget)
     if (tmpToCleanup) {
-      void fs.unlink(tmpToCleanup).catch(() => {});
+      fs.unlink(tmpToCleanup).catch(() => {});
     }
 
     return NextResponse.json({ ok: true, orchestratorWorkspace: orchestratorWs, stdout: res.stdout, stderr: res.stderr });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const status = /required|match \//i.test(msg) ? 400 : 500;
+  } catch (err: unknown) {
+    const msg = errorMessage(err);
+    const isClientError = /required|match \//i.test(msg) || msg.includes("Provide exactly one");
+    const status = isClientError ? 400 : 500;
     return NextResponse.json({ ok: false, error: msg }, { status });
   }
 }

@@ -3,41 +3,11 @@ import path from "node:path";
 
 import { NextResponse } from "next/server";
 
-import { readGoal, writeGoal } from "@/lib/goals";
+import { slugifyFilePart, ensureWorkflowInstructions } from "@/lib/goal-promote";
+import { goalErrorResponse, readGoal, writeGoal } from "@/lib/goals";
 import { getTeamWorkspaceDir, readOpenClawConfig } from "@/lib/paths";
+import { errorMessage } from "@/lib/errors";
 import { runOpenClaw } from "@/lib/openclaw";
-
-function slugifyFilePart(input: string) {
-  return input
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/[\s_-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-}
-
-const WORKFLOW_MARKER = "<!-- goal-workflow -->";
-
-function ensureWorkflowInstructions(body: string) {
-  if (body.includes(WORKFLOW_MARKER)) return body;
-  const snippet = [
-    "",
-    "## Workflow",
-    WORKFLOW_MARKER,
-    "- Use **Promote to inbox** to send this goal to the development-team inbox for scoping.",
-    "- When promoted, set goal status to **active**.",
-    "- Track implementation work via tickets (add links/IDs under a **Tickets** section in this goal).",
-    "- When development is complete (all associated tickets marked done), set goal status to **done**.",
-    "",
-    "## Tickets",
-    "- (add ticket links/ids)",
-    "",
-  ].join("\n");
-
-  return (body ?? "").trim() + snippet;
-}
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -54,7 +24,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     await fs.mkdir(inboxDir, { recursive: true });
 
     const received = new Date().toISOString();
-    const stamp = received.replace(/[-:]/g, "").replace(/\..+$/, "");
+    const stamp = received.replace(/[-:]/g, "").split(".")[0] ?? received;
     const titlePart = slugifyFilePart(existing.frontmatter.title || goalId);
     const filename = `${received.slice(0, 10)}-${received.slice(11, 16).replace(":", "")}-goal-${titlePart || goalId}.md`;
 
@@ -101,16 +71,15 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       body: updatedBody,
     });
 
-    // 3) Optional lead ping only if config is permissive
-    let pingAttempted = false;
-    let pingOk = false;
-    let pingReason: string | null = null;
-
     const cfg = await readOpenClawConfig();
     const enabled = cfg.tools?.agentToAgent?.enabled === true;
     const allow = cfg.tools?.agentToAgent?.allow ?? [];
     const targetAgentId = "development-team-lead";
     const permitted = enabled && (allow.includes("*") || allow.includes(targetAgentId));
+
+    let pingAttempted = false;
+    let pingOk = false;
+    let pingReason: string | null = null;
 
     if (!permitted) {
       pingReason = enabled
@@ -132,7 +101,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         if (!res.ok) throw new Error(res.stderr || `openclaw exit ${res.exitCode}`);
         pingOk = true;
       } catch (e: unknown) {
-        pingReason = e instanceof Error ? e.message : String(e);
+        pingReason = errorMessage(e);
       }
     }
 
@@ -145,8 +114,6 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       pingReason,
     });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    const status = /Invalid goal id|Path traversal/.test(msg) ? 400 : 500;
-    return NextResponse.json({ error: msg }, { status });
+    return goalErrorResponse(e);
   }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { errorMessage } from "@/lib/errors";
 import { runOpenClaw } from "@/lib/openclaw";
 
 export async function POST() {
@@ -14,6 +15,6 @@ export async function POST() {
 
     return NextResponse.json({ ok: true, scheduled: true });
   } catch (e: unknown) {
-    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: errorMessage(e) }, { status: 500 });
   }
 }

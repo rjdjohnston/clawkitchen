@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getTeamWorkspaceDir } from "@/lib/paths";
+import { readdirFiles } from "@/lib/workflows/readdir";
 import type { WorkflowFileV1 } from "@/lib/workflows/types";
 
 const WORKFLOWS_DIR = path.join("shared-context", "workflows");
@@ -27,20 +28,7 @@ export async function getTeamWorkflowsDir(teamId: string) {
 
 export async function listWorkflows(teamId: string) {
   const dir = await getTeamWorkflowsDir(teamId);
-  try {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    const files = entries
-      .filter((e) => e.isFile() && e.name.endsWith(".workflow.json"))
-      .map((e) => e.name)
-      .sort();
-
-    return { ok: true as const, dir, files };
-  } catch (err: unknown) {
-    if (err && typeof err === "object" && (err as { code?: unknown }).code === "ENOENT") {
-      return { ok: true as const, dir, files: [] as string[] };
-    }
-    throw err;
-  }
+  return readdirFiles(dir, ".workflow.json");
 }
 
 export async function readWorkflow(teamId: string, workflowId: string) {

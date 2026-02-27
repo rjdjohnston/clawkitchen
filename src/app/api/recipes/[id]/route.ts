@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { runOpenClaw } from "@/lib/openclaw";
-import { parseFrontmatterId, resolveRecipePath, type RecipeListItem, writeRecipeFile } from "@/lib/recipes";
+import { findRecipeById, parseFrontmatterId, resolveRecipePath, writeRecipeFile } from "@/lib/recipes";
 
 function sha256(text: string) {
   return crypto.createHash("sha256").update(text, "utf8").digest("hex");
@@ -13,10 +13,7 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  // Get list to learn the source (builtin/workspace) and metadata.
-  const list = await runOpenClaw(["recipes", "list"]);
-  const recipes = JSON.parse(list.stdout) as RecipeListItem[];
-  const item = recipes.find((r) => r.id === id);
+  const item = await findRecipeById(id);
   if (!item) return NextResponse.json({ error: `Recipe not found: ${id}` }, { status: 404 });
 
   const shown = await runOpenClaw(["recipes", "show", id]);
@@ -51,10 +48,7 @@ export async function PUT(
     );
   }
 
-  // Determine source/path via list.
-  const list = await runOpenClaw(["recipes", "list"]);
-  const recipes = JSON.parse(list.stdout) as RecipeListItem[];
-  const item = recipes.find((r) => r.id === id);
+  const item = await findRecipeById(id);
   if (!item) return NextResponse.json({ error: `Recipe not found: ${id}` }, { status: 404 });
 
   if (item.source === "builtin") {
