@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { fetchJson } from "@/lib/fetch-json";
 
 function slugifyId(input: string) {
   return String(input ?? "")
@@ -145,7 +146,10 @@ export function OrchestratorSetupModal({
                   setError(null);
                   setResult(null);
                   try {
-                    const res = await fetch("/api/teams/orchestrator/install", {
+                    const json = await fetchJson<
+                      | { ok: true; orchestratorAgentId: string; workspace: string }
+                      | { ok: false; error: string }
+                    >("/api/teams/orchestrator/install", {
                       method: "POST",
                       headers: { "content-type": "application/json" },
                       body: JSON.stringify({
@@ -158,9 +162,6 @@ export function OrchestratorSetupModal({
                         makeExecutable,
                       }),
                     });
-                    const json = (await res.json()) as
-                      | { ok: true; orchestratorAgentId: string; workspace: string }
-                      | { ok: false; error: string };
                     if (!json.ok) throw new Error(json.error);
                     setResult({ orchestratorAgentId: json.orchestratorAgentId, workspace: json.workspace });
                     onInstalled();

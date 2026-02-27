@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { fetchJson } from "@/lib/fetch-json";
 import { OrchestratorSetupModal } from "./OrchestratorSetupModal";
 
 type OrchestratorState =
@@ -35,8 +36,10 @@ export function OrchestratorPanel({ teamId }: { teamId: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/teams/orchestrator?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" });
-      const json = (await res.json()) as OrchestratorState;
+      const json = await fetchJson<OrchestratorState>(
+        `/api/teams/orchestrator?teamId=${encodeURIComponent(teamId)}`,
+        { cache: "no-store" }
+      );
       setState(json);
       setLastLoadedAt(new Date().toISOString());
     } catch (e: unknown) {

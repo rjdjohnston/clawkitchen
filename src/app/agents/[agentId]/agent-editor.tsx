@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { errorMessage } from "@/lib/errors";
-import { fetchJson } from "@/lib/fetch-json";
+import { fetchAll, fetchJson } from "@/lib/fetch-json";
 import { DeleteAgentModal } from "@/components/delete-modals";
 import { IdentityTab, ConfigTab, SkillsTab, FilesTab } from "./agent-editor-tabs";
 
@@ -33,10 +33,10 @@ async function loadAgentFilesAndSkills(
   setters.setAgentFilesLoading(true);
   setters.setSkillsLoading(true);
   try {
-    const [filesRes, skillsRes, availableSkillsRes] = await Promise.all([
-      fetch(`/api/agents/files?agentId=${encodeURIComponent(agentId)}`, { cache: "no-store" }),
-      fetch(`/api/agents/skills?agentId=${encodeURIComponent(agentId)}`, { cache: "no-store" }),
-      fetch("/api/skills/available", { cache: "no-store" }),
+    const [filesRes, skillsRes, availableSkillsRes] = await fetchAll([
+      `/api/agents/files?agentId=${encodeURIComponent(agentId)}`,
+      `/api/agents/skills?agentId=${encodeURIComponent(agentId)}`,
+      "/api/skills/available",
     ]);
 
     let installedSkills: string[] = [];

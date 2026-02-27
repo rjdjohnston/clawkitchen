@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { fetchJson } from "@/lib/fetch-json";
 import type { WorkflowFileV1 } from "@/lib/workflows/types";
 import { validateWorkflowFileV1 } from "@/lib/workflows/validate";
 import { WorkflowCanvas } from "./WorkflowCanvas";
@@ -108,12 +109,11 @@ export default function WorkflowsEditorClient({
           }
         }
 
-        const res = await fetch(
+        const json = await fetchJson<{ ok?: boolean; error?: string; workflow?: unknown }>(
           `/api/teams/workflows?teamId=${encodeURIComponent(teamId)}&id=${encodeURIComponent(workflowId)}`,
           { cache: "no-store" }
         );
-        const json = (await res.json()) as { ok?: boolean; error?: string; workflow?: unknown };
-        if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load workflow");
+        if (!json.ok) throw new Error(json.error || "Failed to load workflow");
         setStatus({ kind: "ready", jsonText: JSON.stringify(json.workflow, null, 2) + "\n" });
       } catch (e: unknown) {
         setStatus({ kind: "error", error: e instanceof Error ? e.message : String(e) });
@@ -157,13 +157,12 @@ export default function WorkflowsEditorClient({
     setSaving(true);
     setActionError("");
     try {
-      const res = await fetch("/api/teams/workflows", {
+      const json = await fetchJson<{ ok?: boolean; error?: string }>("/api/teams/workflows", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ teamId, workflow: parsed.wf }),
       });
-      const json = (await res.json()) as { ok?: boolean; error?: string };
-      if (!res.ok || !json.ok) throw new Error(json.error || "Failed to save workflow");
+      if (!json.ok) throw new Error(json.error || "Failed to save workflow");
 
       // Clear draft cache once persisted.
       try {
@@ -593,20 +592,17 @@ export default function WorkflowsEditorClient({
                           setWorkflowRunsError("");
                           setWorkflowRunsLoading(true);
                           try {
-                            const res = await fetch("/api/teams/workflow-runs", {
+                            await fetchJson<{ ok?: boolean; error?: string }>("/api/teams/workflow-runs", {
                               method: "POST",
                               headers: { "content-type": "application/json" },
                               body: JSON.stringify({ teamId, workflowId: wfId, mode: "sample" }),
                             });
-                            const json = await res.json();
-                            if (!res.ok || !json.ok) throw new Error(json.error || "Failed to create sample run");
 
-                            const listRes = await fetch(
+                            const listJson = await fetchJson<{ ok?: boolean; error?: string; files?: unknown[] }>(
                               `/api/teams/workflow-runs?teamId=${encodeURIComponent(teamId)}&workflowId=${encodeURIComponent(wfId)}`,
                               { cache: "no-store" }
                             );
-                            const listJson = await listRes.json();
-                            if (!listRes.ok || !listJson.ok) throw new Error(listJson.error || "Failed to refresh runs");
+                            if (!listJson.ok) throw new Error(listJson.error || "Failed to refresh runs");
                             const files = Array.isArray(listJson.files) ? listJson.files : [];
                             const list = files.map((f: unknown) => String(f ?? "").trim()).filter((f: string) => Boolean(f));
                             setWorkflowRuns(list);
@@ -646,12 +642,11 @@ export default function WorkflowsEditorClient({
                                 setSelectedWorkflowRun(null);
                                 setWorkflowRunsError("");
                                 try {
-                                  const res = await fetch(
+                                  const json = await fetchJson<{ ok?: boolean; error?: string; run?: unknown }>(
                                     `/api/teams/workflow-runs?teamId=${encodeURIComponent(teamId)}&workflowId=${encodeURIComponent(wfId)}&runId=${encodeURIComponent(runId)}`,
                                     { cache: "no-store" }
                                   );
-                                  const json = await res.json();
-                                  if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load run");
+                                  if (!json.ok) throw new Error(json.error || "Failed to load run");
                                   setSelectedWorkflowRun(json.run);
                                 } catch (e: unknown) {
                                   setWorkflowRunsError(e instanceof Error ? e.message : String(e));
