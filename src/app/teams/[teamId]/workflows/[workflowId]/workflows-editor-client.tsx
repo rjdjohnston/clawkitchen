@@ -28,10 +28,20 @@ export default function WorkflowsEditorClient({
   const [actionError, setActionError] = useState<string>("");
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Canvas (minimal): click node selects; drag nodes.
+  // Canvas: selection, drag, node/edge creation.
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
   const [dragging, setDragging] = useState<null | { nodeId: string; dx: number; dy: number; left: number; top: number }>(null);
+
+  const [activeTool, setActiveTool] = useState<
+    | { kind: "select" }
+    | { kind: "add-node"; nodeType: WorkflowFileV1["nodes"][number]["type"] }
+    | { kind: "connect" }
+  >({ kind: "select" });
+  const [connectFromNodeId, setConnectFromNodeId] = useState<string>("");
+
+  const [agents, setAgents] = useState<Array<{ id: string; identityName?: string }>>([]);
+  const [agentsError, setAgentsError] = useState<string>("");
 
   // Inspector state (parity with modal)
   const [workflowRuns, setWorkflowRuns] = useState<string[]>([]);
@@ -71,6 +81,25 @@ export default function WorkflowsEditorClient({
       }
     })();
   }, [teamId, workflowId, draft]);
+
+  useEffect(() => {
+    (async () => {
+      setAgentsError("");
+      try {
+        const res = await fetch("/api/agents", { cache: "no-store" });
+        const json = (await res.json()) as { agents?: Array<{ id?: unknown; identityName?: unknown }>; error?: string; message?: string };
+        if (!res.ok) throw new Error(json.error || json.message || "Failed to load agents");
+        const list = Array.isArray(json.agents) ? json.agents : [];
+        const filtered = list
+          .map((a) => ({ id: String(a.id ?? "").trim(), identityName: typeof a.identityName === "string" ? a.identityName : undefined }))
+          .filter((a) => a.id && a.id.startsWith(`${teamId}-`));
+        setAgents(filtered);
+      } catch (e: unknown) {
+        setAgentsError(e instanceof Error ? e.message : String(e));
+        setAgents([]);
+      }
+    })();
+  }, [teamId]);
 
   const parsed = useMemo(() => {
     if (status.kind !== "ready") return { wf: null as WorkflowFileV1 | null, err: "" };
@@ -301,8 +330,148 @@ export default function WorkflowsEditorClient({
             className="h-full min-h-0 w-full flex-1 resize-none rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3 font-mono text-xs text-[color:var(--ck-text-primary)]"
           />
         ) : (
-          <div ref={canvasRef} className="relative h-full min-h-0 w-full flex-1 overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20">
+          <div
+            ref={canvasRef}
+            className="relative h-full min-h-0 w-full flex-1 overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20"
+            onClick={(e) => {
+              if (activeTool.kind !== "add-node") return;
+              const wf = parsed.wf;
+              if (!wf) return;
+              const el = canvasRef.current;
+              if (!el) return;
+
+              // Only create when clicking on the canvas background (not a node).
+              const target = e.target as HTMLElement | null;
+              if (target && target.closest("[data-wf-node='1']")) return;
+
+              const rect = el.getBoundingClientRect();
+              const clickX = e.clientX - rect.left + el.scrollLeft;
+              const clickY = e.clientY - rect.top + el.scrollTop;
+
+              const base = activeTool.nodeType.replace(/[^a-z0-9_\-]/gi, "_");
+              const used = new Set(wf.nodes.map((n) => n.id));
+              let i = 1;
+              let id = `${base}_${i}`;
+              while (used.has(id)) {
+                i++;
+                id = `${base}_${i}`;
+              }
+
+              const x = Math.max(0, clickX - 90);
+              const y = Math.max(0, clickY - 24);
+
+              const nextNode: WorkflowFileV1["nodes"][number] = {
+                id,
+                type: activeTool.nodeType,
+                name: id,
+                x,
+                y,
+                config: {},
+              };
+
+              setWorkflow({ ...wf, nodes: [...wf.nodes, nextNode] });
+              setSelectedNodeId(id);
+              setActiveTool({ kind: "select" });
+            }}
+          >
             <div className="relative h-[1200px] w-[2200px]">
+              {/* Tool palette / agent palette */}
+              <div className="sticky left-3 top-3 z-20 w-[260px] rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/40 p-2 backdrop-blur">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">Tools</div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTool({ kind: "select" });
+                      setConnectFromNodeId("");
+                    }}
+                    className={
+                      activeTool.kind === "select"
+                        ? "rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                        : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                    }
+                  >
+                    Select
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTool({ kind: "connect" });
+                      setConnectFromNodeId("");
+                    }}
+                    className={
+                      activeTool.kind === "connect"
+                        ? "rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                        : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                    }
+                    title="Click a node, then click another node to create an edge"
+                  >
+                    Connect
+                  </button>
+
+                  {([
+                    { t: "llm", label: "LLM" },
+                    { t: "tool", label: "Tool" },
+                    { t: "condition", label: "If" },
+                    { t: "delay", label: "Delay" },
+                    { t: "human_approval", label: "Approve" },
+                    { t: "end", label: "End" },
+                  ] as Array<{ t: WorkflowFileV1["nodes"][number]["type"]; label: string }>).map((x) => (
+                    <button
+                      key={x.t}
+                      type="button"
+                      onClick={() => {
+                        setActiveTool({ kind: "add-node", nodeType: x.t });
+                        setConnectFromNodeId("");
+                      }}
+                      className={
+                        activeTool.kind === "add-node" && activeTool.nodeType === x.t
+                          ? "rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                          : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                      }
+                      title="Select tool, then click on the canvas to place"
+                    >
+                      + {x.label}
+                    </button>
+                  ))}
+                </div>
+
+                {activeTool.kind === "connect" && connectFromNodeId ? (
+                  <div className="mt-2 text-xs text-[color:var(--ck-text-secondary)]">Connecting from: <span className="font-mono">{connectFromNodeId}</span></div>
+                ) : null}
+                {activeTool.kind === "add-node" ? (
+                  <div className="mt-2 text-xs text-[color:var(--ck-text-secondary)]">Click on the canvas to place a <span className="font-mono">{activeTool.nodeType}</span> node.</div>
+                ) : null}
+
+                <div className="mt-3 border-t border-white/10 pt-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">Agents</div>
+                    <div className="text-[10px] text-[color:var(--ck-text-tertiary)]">drag → node</div>
+                  </div>
+                  {agentsError ? <div className="mt-1 text-[11px] text-red-200">{agentsError}</div> : null}
+                  <div className="mt-2 max-h-[140px] space-y-1 overflow-auto">
+                    {agents.length ? (
+                      agents.map((a) => (
+                        <div
+                          key={a.id}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData("text/plain", a.id);
+                            e.dataTransfer.effectAllowed = "copy";
+                          }}
+                          className="cursor-grab rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                          title={a.id}
+                        >
+                          {a.identityName ? a.identityName : a.id.replace(`${teamId}-`, "")}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-xs text-[color:var(--ck-text-tertiary)]">No team agents found.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <svg className="absolute inset-0" width={2200} height={1200}>
                 {(parsed.wf?.edges ?? []).map((e) => {
                   const wf = parsed.wf;
@@ -327,8 +496,59 @@ export default function WorkflowsEditorClient({
                     key={n.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setSelectedNodeId(n.id)}
+                    data-wf-node="1"
+                    draggable={activeTool.kind === "select"}
+                    onDragStart={(e) => {
+                      // allow agent pills to be dropped; do not start a browser drag ghost for nodes.
+                      if (activeTool.kind !== "select") return;
+                      e.dataTransfer.setData("text/plain", "");
+                    }}
+                    onDragOver={(e) => {
+                      // Allow dropping agents.
+                      if (e.dataTransfer.types.includes("text/plain")) e.preventDefault();
+                    }}
+                    onDrop={(e) => {
+                      const wf = parsed.wf;
+                      if (!wf) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const agentId = String(e.dataTransfer.getData("text/plain") || "").trim();
+                      if (!agentId) return;
+
+                      const nextNodes = wf.nodes.map((node) => {
+                        if (node.id !== n.id) return node;
+                        const cfg = node.config && typeof node.config === "object" && !Array.isArray(node.config) ? node.config : {};
+                        return { ...node, config: { ...cfg, agentId } };
+                      });
+                      setWorkflow({ ...wf, nodes: nextNodes });
+                      setSelectedNodeId(n.id);
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const wf = parsed.wf;
+                      if (activeTool.kind === "connect") {
+                        if (!wf) return;
+                        if (!connectFromNodeId) {
+                          setConnectFromNodeId(n.id);
+                          setSelectedNodeId(n.id);
+                          return;
+                        }
+                        const from = connectFromNodeId;
+                        const to = n.id;
+                        setConnectFromNodeId("");
+                        if (!from || !to || from === to) return;
+                        const exists = (wf.edges ?? []).some((e) => e.from === from && e.to === to);
+                        if (exists) return;
+                        const id = `e${Date.now()}`;
+                        const nextEdge: WorkflowFileV1["edges"][number] = { id, from, to };
+                        setWorkflow({ ...wf, edges: [...(wf.edges ?? []), nextEdge] });
+                        return;
+                      }
+
+                      setSelectedNodeId(n.id);
+                    }}
                     onPointerDown={(e) => {
+                      if (activeTool.kind !== "select") return;
                       if (e.button !== 0) return;
                       const el = canvasRef.current;
                       if (!el) return;
@@ -359,9 +579,117 @@ export default function WorkflowsEditorClient({
                   >
                     <div className="font-medium text-[color:var(--ck-text-primary)]">{n.name || n.id}</div>
                     <div className="mt-0.5 text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">{n.type}</div>
+                    {(() => {
+                      const cfg = n.config && typeof n.config === "object" && !Array.isArray(n.config) ? (n.config as Record<string, unknown>) : null;
+                      const agentId = cfg ? String(cfg.agentId ?? "").trim() : "";
+                      if (!agentId) return null;
+                      const short = agentId.replace(`${teamId}-`, "");
+                      return <div className="mt-1 text-[10px] text-[color:var(--ck-text-secondary)]">Agent: {short}</div>;
+                    })()}
                   </div>
                 );
               })}
+
+              {/* Inline in-canvas node inspector (requirement #6) */}
+              {(() => {
+                const wf = parsed.wf;
+                if (!wf) return null;
+                if (!selectedNodeId) return null;
+                const node = wf.nodes.find((n) => n.id === selectedNodeId);
+                if (!node) return null;
+
+                const x = typeof node.x === "number" ? node.x : 80;
+                const y = typeof node.y === "number" ? node.y : 80;
+                const cfg = node.config && typeof node.config === "object" && !Array.isArray(node.config) ? (node.config as Record<string, unknown>) : {};
+                const agentId = String(cfg.agentId ?? "").trim();
+
+                return (
+                  <div
+                    className="absolute z-10 w-[320px] rounded-[var(--ck-radius-sm)] border border-white/15 bg-black/60 p-3 shadow-[var(--ck-shadow-1)] backdrop-blur"
+                    style={{ left: x + 200, top: y }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs font-medium text-[color:var(--ck-text-primary)]">{node.name || node.id}</div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedNodeId("")}
+                        className="text-[10px] text-[color:var(--ck-text-tertiary)] hover:text-[color:var(--ck-text-primary)]"
+                      >
+                        Close
+                      </button>
+                    </div>
+
+                    <div className="mt-2 space-y-2">
+                      <label className="block">
+                        <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">name</div>
+                        <input
+                          value={String(node.name ?? "")}
+                          onChange={(e) => {
+                            const nextName = e.target.value;
+                            setWorkflow({ ...wf, nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, name: nextName } : n)) });
+                          }}
+                          className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/30 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                          placeholder="Optional"
+                        />
+                      </label>
+
+                      <label className="block">
+                        <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">type</div>
+                        <select
+                          value={node.type}
+                          onChange={(e) => {
+                            const nextType = e.target.value as WorkflowFileV1["nodes"][number]["type"];
+                            setWorkflow({ ...wf, nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, type: nextType } : n)) });
+                          }}
+                          className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/30 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                        >
+                          <option value="start">start</option>
+                          <option value="end">end</option>
+                          <option value="llm">llm</option>
+                          <option value="tool">tool</option>
+                          <option value="condition">condition</option>
+                          <option value="delay">delay</option>
+                          <option value="human_approval">human_approval</option>
+                        </select>
+                      </label>
+
+                      <label className="block">
+                        <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">agentId</div>
+                        <input
+                          value={agentId}
+                          onChange={(e) => {
+                            const nextAgentId = String(e.target.value || "").trim();
+                            const nextCfg = { ...cfg, ...(nextAgentId ? { agentId: nextAgentId } : {}) };
+                            if (!nextAgentId) delete (nextCfg as Record<string, unknown>).agentId;
+                            setWorkflow({ ...wf, nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, config: nextCfg } : n)) });
+                          }}
+                          className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/30 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                          placeholder="(drag an agent onto the node or type)"
+                        />
+                      </label>
+
+                      <label className="block">
+                        <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">config (json)</div>
+                        <textarea
+                          value={JSON.stringify(cfg, null, 2)}
+                          onChange={(e) => {
+                            try {
+                              const nextCfg = JSON.parse(e.target.value) as Record<string, unknown>;
+                              if (!nextCfg || typeof nextCfg !== "object" || Array.isArray(nextCfg)) return;
+                              setWorkflow({ ...wf, nodes: wf.nodes.map((n) => (n.id === node.id ? { ...n, config: nextCfg } : n)) });
+                            } catch {
+                              // ignore invalid JSON while typing
+                            }
+                          }}
+                          className="mt-1 h-[140px] w-full resize-none rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/30 p-2 font-mono text-[10px] text-[color:var(--ck-text-primary)]"
+                          spellCheck={false}
+                        />
+                        <div className="mt-1 text-[10px] text-[color:var(--ck-text-tertiary)]">(Edits apply when JSON is valid.)</div>
+                      </label>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
