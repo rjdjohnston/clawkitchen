@@ -117,14 +117,14 @@ export default function WorkflowsClient({ teamId }: { teamId: string }) {
               <div className="flex shrink-0 items-center gap-2">
                 <Link
                   href={`/teams/${encodeURIComponent(teamId)}/workflows/${encodeURIComponent(w.id)}`}
-                  className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+                  className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
                 >
                   Edit
                 </Link>
                 <button
                   type="button"
                   onClick={() => void onDelete(w.id)}
-                  className="rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 px-2 py-1 text-xs font-medium text-red-100 hover:bg-red-500/15"
+                  className="rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-100 hover:bg-red-500/15"
                 >
                   Delete
                 </button>
