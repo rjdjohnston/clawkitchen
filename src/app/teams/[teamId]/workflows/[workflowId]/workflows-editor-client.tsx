@@ -26,6 +26,8 @@ export default function WorkflowsEditorClient({
   const [view, setView] = useState<"canvas" | "json">("canvas");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<LoadState>({ kind: "loading" });
+  const [actionError, setActionError] = useState<string>("");
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   // Canvas (minimal): click node selects; drag nodes.
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -78,6 +80,7 @@ export default function WorkflowsEditorClient({
     if (validation.errors.length) return;
 
     setSaving(true);
+    setActionError("");
     try {
       const res = await fetch("/api/teams/workflows", {
         method: "POST",
@@ -93,16 +96,35 @@ export default function WorkflowsEditorClient({
       } catch {
         // ignore
       }
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
+  }
+
+  function onExport() {
+    if (!parsed.wf) return;
+    if (parsed.err) return;
+    if (validation.errors.length) return;
+
+    const filename = `${parsed.wf.id || workflowId}.workflow.json`;
+    const blob = new Blob([JSON.stringify(parsed.wf, null, 2) + "\n"], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   }
 
   if (status.kind === "loading") return <div className="ck-glass w-full p-6">Loading…</div>;
   if (status.kind === "error") return <div className="ck-glass w-full p-6">{status.error}</div>;
 
   return (
-    <div className="ck-glass h-[calc(100dvh-4rem)] w-full p-4">
+    <div className="ck-glass flex h-full min-h-0 w-full flex-col p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-medium text-[color:var(--ck-text-primary)]">
@@ -137,6 +159,53 @@ export default function WorkflowsEditorClient({
             </button>
           </div>
 
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              // Reset the input so re-importing the same file still triggers onChange.
+              e.target.value = "";
+              if (!file) return;
+
+              setActionError("");
+              try {
+                const text = await file.text();
+                const next = JSON.parse(text) as WorkflowFileV1;
+                setStatus({ kind: "ready", jsonText: JSON.stringify(next, null, 2) + "\n" });
+                if (draft) {
+                  try {
+                    sessionStorage.setItem(draftKey(teamId, workflowId), JSON.stringify(next, null, 2) + "\n");
+                  } catch {
+                    // ignore
+                  }
+                }
+              } catch (err: unknown) {
+                setActionError(err instanceof Error ? err.message : String(err));
+              }
+            }}
+          />
+
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => importInputRef.current?.click()}
+            className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-white/10 disabled:opacity-50"
+          >
+            Import
+          </button>
+
+          <button
+            type="button"
+            disabled={!parsed.wf || Boolean(parsed.err) || validation.errors.length > 0}
+            onClick={onExport}
+            className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-white/10 disabled:opacity-50"
+          >
+            Export
+          </button>
+
           <button
             type="button"
             disabled={saving || !parsed.wf || Boolean(parsed.err) || validation.errors.length > 0}
@@ -168,6 +237,23 @@ export default function WorkflowsEditorClient({
               <li key={e}>{e}</li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {!parsed.err && !validation.errors.length && validation.warnings.length ? (
+        <div className="mt-3 rounded-[var(--ck-radius-sm)] border border-yellow-400/30 bg-yellow-500/10 p-3 text-sm text-yellow-100">
+          <div className="font-medium">Workflow validation warnings</div>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {validation.warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {actionError ? (
+        <div className="mt-3 rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">
+          {actionError}
         </div>
       ) : null}
 
