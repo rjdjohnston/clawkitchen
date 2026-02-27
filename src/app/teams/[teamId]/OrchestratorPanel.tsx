@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { OrchestratorSetupModal } from "./OrchestratorSetupModal";
+
 type OrchestratorState =
   | {
       ok: true;
@@ -28,6 +30,7 @@ export function OrchestratorPanel({ teamId }: { teamId: string }) {
   const [loading, setLoading] = useState(true);
   const [state, setState] = useState<OrchestratorState | null>(null);
   const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -70,18 +73,39 @@ export function OrchestratorPanel({ teamId }: { teamId: string }) {
   if (!state.present) {
     return (
       <div className="mt-6 ck-glass-strong p-4">
-        <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Orchestrator</div>
-        <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
-          No swarm/orchestrator detected for this team.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Orchestrator</div>
+            <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">No swarm/orchestrator detected for this team.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSetupOpen(true)}
+            className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] hover:bg-[var(--ck-accent-red-hover)]"
+          >
+            Add Orchestrator
+          </button>
+        </div>
+
         <div className="mt-3 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3 text-sm text-[color:var(--ck-text-secondary)]">
           <div className="text-xs font-medium text-[color:var(--ck-text-tertiary)]">Detection</div>
           <div className="mt-1 font-mono text-xs">{state.reason || "(no reason provided)"}</div>
         </div>
+
         <p className="mt-3 text-sm text-[color:var(--ck-text-secondary)]">
-          Once an orchestrator agent is installed (e.g. <code>&lt;teamId&gt;-swarm-orchestrator</code>), this tab will show:
-          tmux sessions, git worktrees/branches, and active task state.
+          Default convention is <code>&lt;teamId&gt;-swarm-orchestrator</code>. Once installed, this tab will show: tmux sessions,
+          git worktrees/branches, and active task state.
         </p>
+
+        <OrchestratorSetupModal
+          open={setupOpen}
+          onClose={() => setSetupOpen(false)}
+          teamId={teamId}
+          onInstalled={() => {
+            setSetupOpen(false);
+            void load();
+          }}
+        />
       </div>
     );
   }
