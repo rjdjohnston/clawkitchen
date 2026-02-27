@@ -14,6 +14,29 @@ type MemoryItem = {
   _line?: number;
 };
 
+type MemoryPointer = {
+  file: "team.jsonl";
+  line: number;
+};
+
+type PinnedOp =
+  | {
+      op: "pin";
+      ts: string;
+      actor: string;
+      key: MemoryPointer;
+      item: Omit<MemoryItem, "_file" | "_line">;
+    }
+  | {
+      op: "unpin";
+      ts: string;
+      actor: string;
+      key: MemoryPointer;
+    };
+
+const TEAM_FILE = "team.jsonl" as const;
+const PINNED_FILE = "pinned.jsonl" as const;
+
 function safeParseJsonLine(line: string): unknown {
   const t = line.trim();
   if (!t) return null;
@@ -24,7 +47,7 @@ function safeParseJsonLine(line: string): unknown {
   }
 }
 
-function asMemoryItem(x: unknown): MemoryItem | null {
+function asMemoryItem(x: unknown): Omit<MemoryItem, "_file" | "_line"> | null {
   if (!x || typeof x !== "object" || Array.isArray(x)) return null;
   const o = x as Record<string, unknown>;
   const ts = String(o.ts ?? "").trim();
@@ -36,10 +59,43 @@ function asMemoryItem(x: unknown): MemoryItem | null {
   return { ts, author, type, content, source };
 }
 
-async function listJsonlFiles(dir: string): Promise<string[]> {
+function asPointer(x: unknown): MemoryPointer | null {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return null;
+  const o = x as Record<string, unknown>;
+  const file = String(o.file ?? "").trim();
+  const line = Number(o.line);
+  if (file !== TEAM_FILE) return null;
+  if (!Number.isFinite(line) || line <= 0) return null;
+  return { file: TEAM_FILE, line: Math.floor(line) };
+}
+
+function asPinnedOp(x: unknown): PinnedOp | null {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return null;
+  const o = x as Record<string, unknown>;
+  const op = String(o.op ?? "").trim();
+  const ts = String(o.ts ?? "").trim();
+  const actor = String(o.actor ?? "").trim();
+  const key = asPointer(o.key);
+
+  if (!op || !ts || !actor || !key) return null;
+
+  if (op === "pin") {
+    const item = asMemoryItem(o.item);
+    if (!item) return null;
+    return { op: "pin", ts, actor, key, item };
+  }
+
+  if (op === "unpin") {
+    return { op: "unpin", ts, actor, key };
+  }
+
+  return null;
+}
+
+async function readJsonlFile(full: string): Promise<string[]> {
   try {
-    const names = await fs.readdir(dir);
-    return names.filter((n) => n.toLowerCase().endsWith(".jsonl")).sort();
+    const text = await fs.readFile(full, "utf8");
+    return text.split(/\r?\n/);
   } catch {
     return [];
   }
@@ -49,31 +105,64 @@ export async function GET(req: Request) {
   return withTeamContextFromQuery(req, async ({ teamId, teamDir }) => {
     try {
       const memoryDir = path.join(teamDir, "shared-context", "memory");
-      const files = await listJsonlFiles(memoryDir);
+      const teamFull = path.join(memoryDir, TEAM_FILE);
+      const pinnedFull = path.join(memoryDir, PINNED_FILE);
 
-      const items: MemoryItem[] = [];
-      for (const f of files) {
-        const full = path.join(memoryDir, f);
-        let text = "";
-        try {
-          text = await fs.readFile(full, "utf8");
-        } catch {
-          continue;
-        }
+      // Load team items.
+      const teamLines = await readJsonlFile(teamFull);
+      const teamItems: MemoryItem[] = [];
+      for (let i = 0; i < teamLines.length; i++) {
+        const raw = safeParseJsonLine(teamLines[i] ?? "");
+        const item = asMemoryItem(raw);
+        if (!item) continue;
+        teamItems.push({ ...item, _file: TEAM_FILE, _line: i + 1 });
+      }
 
-        const lines = text.split(/\r?\n/);
-        for (let i = 0; i < lines.length; i++) {
-          const raw = safeParseJsonLine(lines[i] ?? "");
-          const item = asMemoryItem(raw);
-          if (!item) continue;
-          items.push({ ...item, _file: f, _line: i + 1 });
+      // Load pinned operations and compute active pinned set.
+      const pinnedLines = await readJsonlFile(pinnedFull);
+      const pinnedByKey = new Map<string, { key: MemoryPointer; item: Omit<MemoryItem, "_file" | "_line">; pinnedAt: string; pinnedBy: string }>();
+
+      for (const line of pinnedLines) {
+        const raw = safeParseJsonLine(line);
+        const op = asPinnedOp(raw);
+        if (!op) continue;
+        const k = `${op.key.file}:${op.key.line}`;
+        if (op.op === "pin") {
+          pinnedByKey.set(k, { key: op.key, item: op.item, pinnedAt: op.ts, pinnedBy: op.actor });
+        } else {
+          pinnedByKey.delete(k);
         }
       }
 
-      // Most recent first (lexical ISO timestamps).
-      items.sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+      const pinnedItems: (MemoryItem & { pinnedAt: string; pinnedBy: string; _key: string })[] = Array.from(pinnedByKey.values()).map(
+        ({ key, item, pinnedAt, pinnedBy }) => ({
+          ...item,
+          _file: key.file,
+          _line: key.line,
+          pinnedAt,
+          pinnedBy,
+          _key: `${key.file}:${key.line}`,
+        })
+      );
 
-      return NextResponse.json({ ok: true, teamId, memoryDir, files, items: items.slice(0, 200) });
+      // Sort pinned by pinnedAt desc (then item.ts desc).
+      pinnedItems.sort((a, b) => String(b.pinnedAt).localeCompare(String(a.pinnedAt)) || String(b.ts).localeCompare(String(a.ts)));
+
+      // Recent: exclude pinned keys and show most recent first.
+      const pinnedKeys = new Set(pinnedItems.map((x) => x._key));
+      const recentItems = teamItems
+        .filter((x) => !pinnedKeys.has(`${x._file ?? ""}:${x._line ?? 0}`))
+        .sort((a, b) => String(b.ts).localeCompare(String(a.ts)))
+        .slice(0, 200);
+
+      return NextResponse.json({
+        ok: true,
+        teamId,
+        memoryDir,
+        files: [TEAM_FILE, PINNED_FILE],
+        pinnedItems,
+        items: recentItems,
+      });
     } catch (e: unknown) {
       return NextResponse.json({ ok: false, error: errorMessage(e) }, { status: 500 });
     }
@@ -90,31 +179,70 @@ export async function POST(req: Request) {
     }
 
     const o = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-    const ts = String(o.ts ?? "").trim();
-    const author = String(o.author ?? "").trim();
-    const type = String(o.type ?? "").trim();
-    const content = String(o.content ?? "").trim();
-    const source = o.source;
-    const file = String(o.file ?? "team.jsonl").trim() || "team.jsonl";
 
-    if (!ts || !author || !type || !content) {
-      return NextResponse.json(
-        { ok: false, error: "ts, author, type, and content are required" },
-        { status: 400 }
-      );
-    }
+    const op = String(o.op ?? "append").trim() || "append";
 
-    if (!/^[a-z0-9_.\-]+\.jsonl$/i.test(file)) {
-      return NextResponse.json({ ok: false, error: "Invalid file" }, { status: 400 });
-    }
+    // Shared validation.
+    const actor = String(o.actor ?? "").trim() || `${teamId}-lead`;
 
     try {
       const memoryDir = path.join(teamDir, "shared-context", "memory");
       await fs.mkdir(memoryDir, { recursive: true });
-      const full = path.join(memoryDir, file);
-      const item: MemoryItem = { ts, author, type, content, ...(source !== undefined ? { source } : {}) };
-      await fs.appendFile(full, JSON.stringify(item) + "\n", "utf8");
-      return NextResponse.json({ ok: true, teamId, file, item });
+
+      // Append to team.jsonl (existing behavior) — explicitly allowlisted.
+      if (op === "append") {
+        const ts = String(o.ts ?? "").trim();
+        const author = String(o.author ?? "").trim();
+        const type = String(o.type ?? "").trim();
+        const content = String(o.content ?? "").trim();
+        const source = o.source;
+
+        if (!ts || !author || !type || !content) {
+          return NextResponse.json(
+            { ok: false, error: "ts, author, type, and content are required" },
+            { status: 400 }
+          );
+        }
+
+        // Safety: only allow appends to team.jsonl.
+        const file = String(o.file ?? TEAM_FILE).trim() || TEAM_FILE;
+        if (file !== TEAM_FILE) {
+          return NextResponse.json({ ok: false, error: "Invalid file" }, { status: 400 });
+        }
+
+        const full = path.join(memoryDir, TEAM_FILE);
+        const item: MemoryItem = { ts, author, type, content, ...(source !== undefined ? { source } : {}) };
+        await fs.appendFile(full, JSON.stringify(item) + "\n", "utf8");
+        return NextResponse.json({ ok: true, teamId, file: TEAM_FILE, item });
+      }
+
+      // Pin/unpin operations: append-only ops into pinned.jsonl.
+      if (op === "pin" || op === "unpin") {
+        const ts = String(o.ts ?? new Date().toISOString()).trim();
+        const key = asPointer(o.key);
+        if (!key) {
+          return NextResponse.json({ ok: false, error: "Invalid key" }, { status: 400 });
+        }
+
+        if (op === "pin") {
+          const item = asMemoryItem(o.item);
+          if (!item) {
+            return NextResponse.json({ ok: false, error: "Invalid item" }, { status: 400 });
+          }
+
+          const record: PinnedOp = { op: "pin", ts, actor, key, item };
+          const full = path.join(memoryDir, PINNED_FILE);
+          await fs.appendFile(full, JSON.stringify(record) + "\n", "utf8");
+          return NextResponse.json({ ok: true, teamId, op: "pin", key });
+        }
+
+        const record: PinnedOp = { op: "unpin", ts, actor, key };
+        const full = path.join(memoryDir, PINNED_FILE);
+        await fs.appendFile(full, JSON.stringify(record) + "\n", "utf8");
+        return NextResponse.json({ ok: true, teamId, op: "unpin", key });
+      }
+
+      return NextResponse.json({ ok: false, error: `Unknown op: ${op}` }, { status: 400 });
     } catch (e: unknown) {
       return NextResponse.json({ ok: false, error: errorMessage(e) }, { status: 500 });
     }
