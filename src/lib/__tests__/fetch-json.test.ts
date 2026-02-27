@@ -1,5 +1,28 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fetchJson, fetchJsonWithStatus } from "../fetch-json";
+import { fetchAll, fetchJson, fetchJsonWithStatus } from "../fetch-json";
+
+describe("fetchAll", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(`{"url":"${url}"}`),
+          json: () => Promise.resolve({ url }),
+        } as Response)
+      )
+    );
+  });
+
+  it("fetches multiple URLs in parallel with cache no-store", async () => {
+    const responses = await fetchAll(["https://a.com", "https://b.com"]);
+    expect(responses).toHaveLength(2);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledWith("https://a.com", { cache: "no-store" });
+    expect(fetch).toHaveBeenCalledWith("https://b.com", { cache: "no-store" });
+  });
+});
 
 describe("fetchJson", () => {
   beforeEach(() => {

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
+import { jsonOkRest, parseJsonBody } from "@/lib/api-route-helpers";
+import { handleWorkflowRunsGet } from "@/lib/workflows/api-handlers";
 import { errorMessage } from "@/lib/errors";
 import { toolsInvoke } from "@/lib/gateway";
 import { listWorkflowRuns, readWorkflowRun, writeWorkflowRun } from "@/lib/workflows/runs-storage";
@@ -90,42 +92,14 @@ async function maybeSendApprovalRequest({
 }
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const teamId = String(searchParams.get("teamId") ?? "").trim();
-  const workflowId = String(searchParams.get("workflowId") ?? "").trim();
-  const runId = String(searchParams.get("runId") ?? "").trim();
-
-  if (!teamId) return NextResponse.json({ ok: false, error: "teamId is required" }, { status: 400 });
-  if (!workflowId) return NextResponse.json({ ok: false, error: "workflowId is required" }, { status: 400 });
-
-  try {
-    if (runId) {
-      const r = await readWorkflowRun(teamId, workflowId, runId);
-      const { ok, ...rest } = r;
-      // eslint-disable-next-line sonarjs/void-use -- exclude ok from response
-      void ok;
-      return NextResponse.json({ ok: true, ...rest });
-    }
-
-    const r = await listWorkflowRuns(teamId, workflowId);
-    const { ok, ...rest } = r;
-    // eslint-disable-next-line sonarjs/void-use -- exclude ok from response
-    void ok;
-    return NextResponse.json({ ok: true, ...rest });
-  } catch (err: unknown) {
-    return NextResponse.json({ ok: false, error: errorMessage(err) }, { status: 500 });
-  }
+  return handleWorkflowRunsGet(req, readWorkflowRun, listWorkflowRuns);
 }
 
 export async function POST(req: Request) {
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsed = await parseJsonBody(req);
+  if (parsed instanceof NextResponse) return parsed;
+  const { body: o } = parsed;
 
-  const o = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const teamId = String(o.teamId ?? "").trim();
   const workflowId = String(o.workflowId ?? "").trim();
   const mode = String(o.mode ?? "").trim();
@@ -213,11 +187,7 @@ export async function POST(req: Request) {
         nodes: nextNodes,
       };
 
-      const wr = await writeWorkflowRun(teamId, workflowId, nextRun);
-      const { ok, ...rest } = wr;
-      // eslint-disable-next-line sonarjs/void-use -- exclude ok from response
-      void ok;
-      return NextResponse.json({ ok: true, runId: run.id, ...rest });
+      return jsonOkRest({ ...(await writeWorkflowRun(teamId, workflowId, nextRun)), runId: run.id });
     }
 
     // Create mode
@@ -422,11 +392,7 @@ export async function POST(req: Request) {
             nodes: [],
           };
 
-    const r = await writeWorkflowRun(teamId, workflowId, run);
-    const { ok, ...rest } = r;
-    // eslint-disable-next-line sonarjs/void-use -- exclude ok from response
-    void ok;
-    return NextResponse.json({ ok: true, runId, ...rest });
+    return jsonOkRest({ ...(await writeWorkflowRun(teamId, workflowId, run)), runId });
   } catch (err: unknown) {
     return NextResponse.json({ ok: false, error: errorMessage(err) }, { status: 500 });
   }

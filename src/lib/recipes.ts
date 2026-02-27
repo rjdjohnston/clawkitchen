@@ -48,6 +48,13 @@ export function forceFrontmatterId(md: string, id: string): string {
   return `---\n${nextLines.join("\n")}\n---\n${body}`;
 }
 
+/** Returns display name for a team from recipe list, or null if not found. */
+export async function getTeamDisplayName(teamId: string): Promise<string | null> {
+  const recipes = await listRecipes();
+  const match = recipes.find((r) => r.kind === "team" && r.id === teamId);
+  return match?.name ?? null;
+}
+
 /** Fetches recipe list from openclaw. Returns empty array on failure. */
 export async function listRecipes(): Promise<RecipeListItem[]> {
   const list = await runOpenClaw(["recipes", "list"]);

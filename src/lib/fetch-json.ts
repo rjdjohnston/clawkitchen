@@ -1,3 +1,8 @@
+/** Fetches multiple URLs in parallel with cache: "no-store". */
+export async function fetchAll(urls: string[]): Promise<Response[]> {
+  return Promise.all(urls.map((url) => fetch(url, { cache: "no-store" })));
+}
+
 /**
  * Fetches JSON and throws on !res.ok.
  * Use errorMessage(e) in catch blocks.

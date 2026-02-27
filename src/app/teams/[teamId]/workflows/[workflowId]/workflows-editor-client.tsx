@@ -14,6 +14,46 @@ function draftKey(teamId: string, workflowId: string) {
   return `ck-wf-draft:${teamId}:${workflowId}`;
 }
 
+const NODE_TYPE_OPTIONS: Array<WorkflowFileV1["nodes"][number]["type"]> = [
+  "start",
+  "end",
+  "llm",
+  "tool",
+  "condition",
+  "delay",
+  "human_approval",
+];
+
+function NodeSelect({
+  label,
+  value,
+  onChange,
+  nodes,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  nodes: WorkflowFileV1["nodes"];
+}) {
+  return (
+    <label className="block">
+      <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">{label}</div>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+      >
+        <option value="">(select)</option>
+        {nodes.map((n) => (
+          <option key={n.id} value={n.id}>
+            {n.id}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export default function WorkflowsEditorClient({
   teamId,
   workflowId,
@@ -314,17 +354,7 @@ export default function WorkflowsEditorClient({
             wf={parsed.wf}
             selectedNodeId={selectedNodeId}
             onSelectNode={setSelectedNodeId}
-            onWorkflowChange={(next) => {
-              const text = JSON.stringify(next, null, 2) + "\n";
-              setStatus({ kind: "ready", jsonText: text });
-              if (draft) {
-                try {
-                  sessionStorage.setItem(draftKey(teamId, workflowId), text);
-                } catch {
-                  // ignore
-                }
-              }
-            }}
+            onWorkflowChange={setWorkflow}
           />
         )}
 
@@ -674,13 +704,11 @@ export default function WorkflowsEditorClient({
                               onChange={(e) => setNewNodeType(e.target.value as WorkflowFileV1["nodes"][number]["type"])}
                               className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
                             >
-                              <option value="start">start</option>
-                              <option value="end">end</option>
-                              <option value="llm">llm</option>
-                              <option value="tool">tool</option>
-                              <option value="condition">condition</option>
-                              <option value="delay">delay</option>
-                              <option value="human_approval">human_approval</option>
+                              {NODE_TYPE_OPTIONS.map((t) => (
+                                <option key={t} value={t}>
+                                  {t}
+                                </option>
+                              ))}
                             </select>
                           </label>
 
@@ -740,37 +768,18 @@ export default function WorkflowsEditorClient({
 
                       <div className="mt-2 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
                         <div className="grid grid-cols-1 gap-2">
-                          <label className="block">
-                            <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">from</div>
-                            <select
-                              value={newEdgeFrom}
-                              onChange={(e) => setNewEdgeFrom(e.target.value)}
-                              className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
-                            >
-                              <option value="">(select)</option>
-                              {wf.nodes.map((n) => (
-                                <option key={n.id} value={n.id}>
-                                  {n.id}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-
-                          <label className="block">
-                            <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">to</div>
-                            <select
-                              value={newEdgeTo}
-                              onChange={(e) => setNewEdgeTo(e.target.value)}
-                              className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
-                            >
-                              <option value="">(select)</option>
-                              {wf.nodes.map((n) => (
-                                <option key={n.id} value={n.id}>
-                                  {n.id}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                          <NodeSelect
+                            label="from"
+                            value={newEdgeFrom}
+                            onChange={setNewEdgeFrom}
+                            nodes={wf.nodes}
+                          />
+                          <NodeSelect
+                            label="to"
+                            value={newEdgeTo}
+                            onChange={setNewEdgeTo}
+                            nodes={wf.nodes}
+                          />
 
                           <label className="block">
                             <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">label (optional)</div>
@@ -888,13 +897,11 @@ export default function WorkflowsEditorClient({
                                   }}
                                   className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
                                 >
-                                  <option value="start">start</option>
-                                  <option value="end">end</option>
-                                  <option value="llm">llm</option>
-                                  <option value="tool">tool</option>
-                                  <option value="condition">condition</option>
-                                  <option value="delay">delay</option>
-                                  <option value="human_approval">human_approval</option>
+                                  {NODE_TYPE_OPTIONS.map((t) => (
+                                    <option key={t} value={t}>
+                                      {t}
+                                    </option>
+                                  ))}
                                 </select>
                               </label>
 

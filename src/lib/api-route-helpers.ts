@@ -1,8 +1,38 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
+
+/** Parses JSON body; returns 400 on parse error. */
+export async function parseJsonBody(req: Request): Promise<{ body: Record<string, unknown> } | NextResponse> {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
+  }
+  const o = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  return { body: o };
+}
+
+/** Returns NextResponse.json({ ok: true, ...rest }) from a storage result with ok field. */
+export function jsonOkRest<T extends { ok: boolean }>(r: T): NextResponse {
+  const rest = Object.fromEntries(Object.entries(r as Record<string, unknown>).filter(([k]) => k !== "ok"));
+  return NextResponse.json({ ok: true, ...rest });
+}
+
 import { resolveAgentWorkspace } from "@/lib/agents";
 import { errorMessage } from "@/lib/errors";
+
+/** Runs async storage fn and returns jsonOkRest on success, or 500 on error. */
+export async function withStorageError<T extends { ok: boolean }>(
+  fn: () => Promise<T>
+): Promise<NextResponse> {
+  try {
+    return jsonOkRest(await fn());
+  } catch (err: unknown) {
+    return NextResponse.json({ ok: false, error: errorMessage(err) }, { status: 500 });
+  }
+}
 import { readOpenClawConfig, teamDirFromBaseWorkspace } from "@/lib/paths";
 
 export type TeamContext = { teamId: string; teamDir: string };

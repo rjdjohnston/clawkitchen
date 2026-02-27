@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { jsonOkRest, parseJsonBody } from "@/lib/api-route-helpers";
 import { errorMessage } from "@/lib/errors";
+import { handleWorkflowsGet } from "@/lib/workflows/api-handlers";
 import { deleteWorkflow, listWorkflows, readWorkflow, writeWorkflow } from "@/lib/workflows/storage";
 import type { WorkflowFileV1 } from "@/lib/workflows/types";
 
@@ -14,40 +16,13 @@ function isWorkflowFileV1(v: unknown): v is WorkflowFileV1 {
 }
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const teamId = String(searchParams.get("teamId") ?? "").trim();
-  const id = String(searchParams.get("id") ?? "").trim();
-
-  if (!teamId) return NextResponse.json({ ok: false, error: "teamId is required" }, { status: 400 });
-
-  try {
-    if (id) {
-      const r = await readWorkflow(teamId, id);
-      const { ok, ...rest } = r;
-      // eslint-disable-next-line sonarjs/void-use -- exclude ok from response
-      void ok;
-      return NextResponse.json({ ok: true, ...rest });
-    }
-
-    const r = await listWorkflows(teamId);
-    const { ok, ...rest } = r;
-    // eslint-disable-next-line sonarjs/void-use -- exclude ok from response
-    void ok;
-    return NextResponse.json({ ok: true, ...rest });
-  } catch (err: unknown) {
-    return NextResponse.json({ ok: false, error: errorMessage(err) }, { status: 500 });
-  }
+  return handleWorkflowsGet(req, readWorkflow, listWorkflows);
 }
 
 export async function POST(req: Request) {
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const o = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const parsed = await parseJsonBody(req);
+  if (parsed instanceof NextResponse) return parsed;
+  const { body: o } = parsed;
 
   const teamId = String(o.teamId ?? "").trim();
   const workflowRaw = o.workflow;
@@ -58,11 +33,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const r = await writeWorkflow(teamId, workflowRaw);
-    const { ok, ...rest } = r;
-    // eslint-disable-next-line sonarjs/void-use -- exclude ok from response
-    void ok;
-    return NextResponse.json({ ok: true, ...rest });
+    return jsonOkRest(await writeWorkflow(teamId, workflowRaw));
   } catch (err: unknown) {
     return NextResponse.json({ ok: false, error: errorMessage(err) }, { status: 500 });
   }
@@ -77,11 +48,7 @@ export async function DELETE(req: Request) {
   if (!id) return NextResponse.json({ ok: false, error: "id is required" }, { status: 400 });
 
   try {
-    const r = await deleteWorkflow(teamId, id);
-    const { ok, ...rest } = r;
-    // eslint-disable-next-line sonarjs/void-use -- exclude ok from response
-    void ok;
-    return NextResponse.json({ ok: true, ...rest });
+    return jsonOkRest(await deleteWorkflow(teamId, id));
   } catch (err: unknown) {
     return NextResponse.json({ ok: false, error: errorMessage(err) }, { status: 500 });
   }

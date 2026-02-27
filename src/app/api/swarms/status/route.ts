@@ -1,31 +1,11 @@
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 
 import { NextResponse } from "next/server";
 
 import { errorMessage } from "@/lib/errors";
 import { getKitchenApi } from "@/lib/kitchen-api";
-
-function normalizeId(kind: string, id: string) {
-  const s = String(id ?? "").trim();
-  if (!s) throw new Error(`${kind} is required`);
-  if (!/^[a-z0-9][a-z0-9-]{0,62}$/i.test(s)) {
-    throw new Error(`${kind} must match /^[a-z0-9][a-z0-9-]{0,62}$/i`);
-  }
-  return s;
-}
-
-async function resolveOrchestratorWorkspace(orchestratorAgentId: string) {
-  const cfgPath = path.join(os.homedir(), ".openclaw", "openclaw.json");
-  const raw = await fs.readFile(cfgPath, "utf8");
-  const cfg = JSON.parse(raw) as { agents?: { defaults?: { workspace?: string } } };
-
-  const baseWorkspace = String(cfg?.agents?.defaults?.workspace ?? "").trim();
-  if (!baseWorkspace) throw new Error("agents.defaults.workspace not set");
-
-  return path.resolve(baseWorkspace, "..", `workspace-${orchestratorAgentId}`);
-}
+import { normalizeId, resolveAgentWorkspace } from "@/lib/swarms";
 
 export async function GET(req: Request) {
   try {
@@ -35,7 +15,7 @@ export async function GET(req: Request) {
       url.searchParams.get("orchestratorAgentId") || url.searchParams.get("agentId") || "",
     );
 
-    const orchestratorWs = await resolveOrchestratorWorkspace(orchestratorAgentId);
+    const orchestratorWs = await resolveAgentWorkspace(orchestratorAgentId);
     const cliPath = path.join(orchestratorWs, ".clawdbot", "task.sh");
     await fs.access(cliPath);
 

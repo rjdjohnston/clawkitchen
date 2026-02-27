@@ -1,17 +1,11 @@
 import Link from "next/link";
 import { unstable_noStore as noStore } from "next/cache";
 
-import { listRecipes } from "@/lib/recipes";
+import { getTeamDisplayName } from "@/lib/recipes";
 import WorkflowsClient from "./workflows-client";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-async function getTeamDisplayName(teamId: string) {
-  const recipes = await listRecipes();
-  const match = recipes.find((r) => r.kind === "team" && r.id === teamId);
-  return match?.name ?? null;
-}
 
 export default async function WorkflowsPage({
   params,

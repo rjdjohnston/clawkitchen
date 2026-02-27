@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getTeamWorkspaceDir } from "@/lib/paths";
+import { readdirFiles } from "@/lib/workflows/readdir";
 import { assertSafeWorkflowId } from "@/lib/workflows/storage";
 import type { WorkflowRunFileV1 } from "@/lib/workflows/runs-types";
 
@@ -27,20 +28,7 @@ export function workflowRunFileName(runId: string) {
 
 export async function listWorkflowRuns(teamId: string, workflowId: string) {
   const dir = await getWorkflowRunsDir(teamId, workflowId);
-  try {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    const files = entries
-      .filter((e) => e.isFile() && e.name.endsWith(".run.json"))
-      .map((e) => e.name)
-      .sort()
-      .reverse();
-    return { ok: true as const, dir, files };
-  } catch (err: unknown) {
-    if (err && typeof err === "object" && (err as { code?: unknown }).code === "ENOENT") {
-      return { ok: true as const, dir, files: [] as string[] };
-    }
-    throw err;
-  }
+  return readdirFiles(dir, ".run.json", true);
 }
 
 export async function readWorkflowRun(teamId: string, workflowId: string, runId: string) {

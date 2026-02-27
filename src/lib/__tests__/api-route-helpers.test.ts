@@ -1,5 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { getTeamContextFromQuery, getTeamContextFromBody, listWorkspaceFiles, installSkillErrorResponse } from "../api-route-helpers";
+import {
+  getTeamContextFromQuery,
+  getTeamContextFromBody,
+  jsonOkRest,
+  listWorkspaceFiles,
+  installSkillErrorResponse,
+  parseJsonBody,
+} from "../api-route-helpers";
 
 vi.mock("@/lib/paths", () => ({
   readOpenClawConfig: vi.fn(),
@@ -46,6 +53,50 @@ describe("api-route-helpers", () => {
         teamId: "my-team",
         teamDir: "/home/x/agents/../workspace-my-team",
       });
+    });
+  });
+
+  describe("parseJsonBody", () => {
+    it("returns body object when JSON valid", async () => {
+      const req = new Request("https://test", {
+        method: "POST",
+        body: JSON.stringify({ teamId: "t1", x: 1 }),
+        headers: { "content-type": "application/json" },
+      });
+      const result = await parseJsonBody(req);
+      expect(result).not.toBeInstanceOf(Response);
+      expect((result as { body: Record<string, unknown> }).body).toEqual({ teamId: "t1", x: 1 });
+    });
+
+    it("returns 400 when JSON invalid", async () => {
+      const req = new Request("https://test", {
+        method: "POST",
+        body: "not json",
+        headers: { "content-type": "application/json" },
+      });
+      const result = await parseJsonBody(req);
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(400);
+      const json = await (result as Response).json();
+      expect(json.error).toBe("Invalid JSON");
+    });
+  });
+
+  describe("jsonOkRest", () => {
+    it("returns NextResponse.json with ok:true and rest of object", async () => {
+      const res = jsonOkRest({ ok: true, path: "/a/b", workflow: { id: "w1", name: "W" } });
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.ok).toBe(true);
+      expect(json.path).toBe("/a/b");
+      expect(json.workflow).toEqual({ id: "w1", name: "W" });
+    });
+
+    it("omits ok from rest when input has ok:false", async () => {
+      const res = jsonOkRest({ ok: false, error: "x" });
+      const json = await res.json();
+      expect(json.ok).toBe(true);
+      expect(json.error).toBe("x");
     });
   });
 

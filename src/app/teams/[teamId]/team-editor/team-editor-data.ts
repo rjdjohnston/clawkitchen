@@ -1,43 +1,39 @@
 import { errorMessage } from "@/lib/errors";
-import { fetchJson } from "@/lib/fetch-json";
-import type { RecipeListItem, TeamAgentEntry, TeamFileEntry } from "./types";
+import { fetchAll, fetchJson } from "@/lib/fetch-json";
+import type { RecipeListItem, TeamAgentEntry, TeamTabSetters } from "./types";
 import { safeParseJson } from "./team-editor-utils";
 
-export async function loadTeamTabData(
-  teamId: string,
-  setters: {
-    setTeamFiles: (f: TeamFileEntry[]) => void;
-    setCronJobs: (j: unknown[]) => void;
-    setTeamAgents: (a: TeamAgentEntry[]) => void;
-    setSkillsList: (s: string[]) => void;
-    setAvailableSkills: (s: string[]) => void;
-    setSelectedSkill: (fn: (prev: string) => string) => void;
-    setTeamFilesLoading: (v: boolean) => void;
-    setCronLoading: (v: boolean) => void;
-    setTeamAgentsLoading: (v: boolean) => void;
-    setSkillsLoading: (v: boolean) => void;
-  }
-): Promise<void> {
+async function fetchRecipesAndMeta(teamId: string) {
+  const [recipesData, metaRes] = await Promise.all([
+    fetchJson<{ recipes?: RecipeListItem[] }>("/api/recipes", { cache: "no-store" }),
+    fetch(`/api/teams/meta?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" }),
+  ]);
+  return { recipesData, metaRes };
+}
+
+const TEAM_TAB_URLS = (teamId: string) => [
+  `/api/teams/files?teamId=${encodeURIComponent(teamId)}`,
+  `/api/cron/jobs?teamId=${encodeURIComponent(teamId)}`,
+  "/api/agents",
+  `/api/teams/skills?teamId=${encodeURIComponent(teamId)}`,
+  "/api/skills/available",
+];
+
+async function fetchTeamTabResponses(teamId: string) {
+  const responses = await fetchAll(TEAM_TAB_URLS(teamId));
+  const texts = await Promise.all(responses.map((r) => r.text()));
+  return { responses, texts };
+}
+
+export async function loadTeamTabData(teamId: string, setters: TeamTabSetters): Promise<void> {
   setters.setTeamFilesLoading(true);
   setters.setCronLoading(true);
   setters.setTeamAgentsLoading(true);
   setters.setSkillsLoading(true);
   try {
-    const [filesRes, cronRes, agentsRes, skillsRes, availableSkillsRes] = await Promise.all([
-      fetch(`/api/teams/files?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" }),
-      fetch(`/api/cron/jobs?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" }),
-      fetch("/api/agents", { cache: "no-store" }),
-      fetch(`/api/teams/skills?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" }),
-      fetch("/api/skills/available", { cache: "no-store" }),
-    ]);
-
-    const [filesText, cronText, agentsText, skillsText, availableText] = await Promise.all([
-      filesRes.text(),
-      cronRes.text(),
-      agentsRes.text(),
-      skillsRes.text(),
-      availableSkillsRes.text(),
-    ]);
+    const { responses, texts } = await fetchTeamTabResponses(teamId);
+    const [filesRes, cronRes, agentsRes, skillsRes, availableSkillsRes] = responses;
+    const [filesText, cronText, agentsText, skillsText, availableText] = texts;
 
     const filesJson = safeParseJson<{ ok?: boolean; files?: unknown[] }>(filesText, {});
     if (filesRes.ok && filesJson.ok && Array.isArray(filesJson.files)) {
@@ -89,41 +85,24 @@ export async function loadTeamTabData(
   }
 }
 
-export async function loadTeamEditorInitial(
-  teamId: string,
-  setters: {
-    setRecipes: (r: RecipeListItem[]) => void;
-    setLockedFromId: (v: string | null) => void;
-    setLockedFromName: (v: string | null) => void;
-    setProvenanceMissing: (v: boolean) => void;
-    setFromId: (v: string) => void;
-    setTeamMetaRecipeHash: (v: string | null) => void;
-    setTeamFiles: (f: TeamFileEntry[]) => void;
-    setCronJobs: (j: unknown[]) => void;
-    setTeamAgents: (a: TeamAgentEntry[]) => void;
-    setSkillsList: (s: string[]) => void;
-    setAvailableSkills: (s: string[]) => void;
-    setSelectedSkill: (fn: (prev: string) => string) => void;
-    setTeamFilesLoading: (v: boolean) => void;
-    setCronLoading: (v: boolean) => void;
-    setTeamAgentsLoading: (v: boolean) => void;
-    setSkillsLoading: (v: boolean) => void;
-  }
-): Promise<void> {
-  const [recipesRes, metaRes] = await Promise.all([
-    fetch("/api/recipes", { cache: "no-store" }),
-    fetch(`/api/teams/meta?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" }),
-  ]);
+export type LoadTeamEditorInitialSetters = TeamTabSetters & {
+  setRecipes: (r: RecipeListItem[]) => void;
+  setLockedFromId: (v: string | null) => void;
+  setLockedFromName: (v: string | null) => void;
+  setProvenanceMissing: (v: boolean) => void;
+  setFromId: (v: string) => void;
+  setTeamMetaRecipeHash: (v: string | null) => void;
+};
 
-  const json = await recipesRes.json();
-  const list = (json.recipes ?? []) as RecipeListItem[];
-  setters.setRecipes(list);
+export async function loadTeamEditorInitial(teamId: string, setters: LoadTeamEditorInitialSetters): Promise<void> {
+  const initialData = await fetchRecipesAndMeta(teamId);
+  setters.setRecipes((initialData.recipesData.recipes ?? []) as RecipeListItem[]);
 
   let locked: { recipeId: string; recipeName?: string } | null = null;
   try {
-    const metaJson = await metaRes.json();
+    const metaJson = await initialData.metaRes.json();
     const meta = metaJson.meta as { recipeId?: unknown; recipeName?: unknown; recipeHash?: unknown } | undefined;
-    if (metaRes.ok && metaJson.ok && meta?.recipeId) {
+    if (initialData.metaRes.ok && metaJson.ok && meta?.recipeId) {
       locked = {
         recipeId: String(meta.recipeId),
         recipeName: typeof meta.recipeName === "string" ? meta.recipeName : undefined,
