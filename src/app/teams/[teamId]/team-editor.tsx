@@ -1445,8 +1445,8 @@ export default function TeamEditor({ teamId, initialTab }: { teamId: string; ini
                   </button>
                 </div>
 
-                <div className="h-[calc(100%-3rem)] overflow-auto p-4">
-                  <div className="ck-glass-strong p-4 lg:col-span-2">
+                <div className="h-[calc(100%-3rem)]">
+                  <div className="flex h-full min-h-0 flex-col">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Workflow editor</div>
 
@@ -1610,14 +1610,14 @@ export default function TeamEditor({ teamId, initialTab }: { teamId: string; ini
             ) : null}
 
             {workflowView === "canvas" ? (
-              <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-4">
-                <div className="lg:col-span-3">
+              <div className="mt-3 flex min-h-0 flex-1 gap-3">
+                <div className="min-h-0 flex-1">
                   <div
                     ref={workflowCanvasRef}
-                    className="relative h-[calc(100dvh-14rem)] min-h-[70dvh] w-full overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20"
+                    className="relative h-full min-h-0 w-full overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20"
                   >
-                    <div className="relative h-[900px] w-[1400px]">
-                      <svg className="absolute inset-0" width={1400} height={900}>
+                    <div className="relative h-[1200px] w-[2200px]">
+                      <svg className="absolute inset-0" width={2200} height={1200}>
                         {(workflowParsed?.edges ?? []).map((e) => {
                           const wf = workflowParsed;
                           if (!wf) return null;
@@ -1684,7 +1684,7 @@ export default function TeamEditor({ teamId, initialTab }: { teamId: string; ini
                   </div>
                 </div>
 
-                <div className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3 lg:col-span-1">
+                <div className="min-h-0 w-[360px] shrink-0 overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3">
                   <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Workflow</div>
 
                   {workflowParsed ? (
