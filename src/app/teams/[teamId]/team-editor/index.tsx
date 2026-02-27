@@ -19,8 +19,8 @@ import { TeamAgentsTab } from "./TeamAgentsTab";
 import { TeamSkillsTab } from "./TeamSkillsTab";
 import { TeamCronTab } from "./TeamCronTab";
 import { TeamFilesTab } from "./TeamFilesTab";
+import { TeamMemoryTab } from "./TeamMemoryTab";
 import { OrchestratorPanel } from "../OrchestratorPanel";
-import Link from "next/link";
 import WorkflowsClient from "../workflows/workflows-client";
 
 const TABS = [
@@ -29,6 +29,7 @@ const TABS = [
   { id: "skills" as const, label: "Skills" },
   { id: "cron" as const, label: "Cron" },
   { id: "files" as const, label: "Files" },
+  { id: "memory" as const, label: "Memory" },
   { id: "orchestrator" as const, label: "Orchestrator" },
   { id: "workflows" as const, label: "Workflows" },
 ];
@@ -47,7 +48,7 @@ export default function TeamEditor({ teamId, initialTab }: { teamId: string; ini
   const [content, setContent] = useState<string>("");
   const [loadedRecipeHash, setLoadedRecipeHash] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>(() => {
-    const valid: TabId[] = ["recipe", "agents", "skills", "cron", "files", "orchestrator"];
+    const valid: TabId[] = ["recipe", "agents", "skills", "cron", "files", "memory", "orchestrator", "workflows"];
     return valid.includes(initialTab as TabId) ? (initialTab as TabId) : "recipe";
   });
   const [loading, setLoading] = useState(true);
@@ -137,7 +138,7 @@ export default function TeamEditor({ teamId, initialTab }: { teamId: string; ini
     setTeamMetaRecipeHash(null);
     setPublishOpen(false);
     setDeleteOpen(false);
-    const valid: TabId[] = ["recipe", "agents", "skills", "cron", "files", "orchestrator"];
+    const valid: TabId[] = ["recipe", "agents", "skills", "cron", "files", "memory", "orchestrator", "workflows"];
     if (initialTab && valid.includes(initialTab as TabId)) {
       setActiveTab(initialTab as TabId);
     }
@@ -465,6 +466,12 @@ export default function TeamEditor({ teamId, initialTab }: { teamId: string; ini
       )}
 
       {activeTab === "orchestrator" && <OrchestratorPanel teamId={teamId} />}
+
+      {activeTab === "memory" && (
+        <div className="mt-6">
+          <TeamMemoryTab teamId={teamId} />
+        </div>
+      )}
 
       {activeTab === "files" && (
         <TeamFilesTab
