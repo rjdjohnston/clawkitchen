@@ -1302,7 +1302,9 @@ export default function TeamEditor({ teamId, initialTab }: { teamId: string; ini
                 }}
                 className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)] disabled:opacity-50"
               >
-                {workflowSaving ? "Working…" : "Create Marketing Cadence template"}
+                {workflowSaving
+                  ? "Working…"
+                  : `Create ${(toName || teamId).trim() || teamId} template`}
               </button>
               ) : null}
 
@@ -1695,7 +1697,7 @@ export default function TeamEditor({ teamId, initialTab }: { teamId: string; ini
                 <div className="lg:col-span-3">
                   <div
                     ref={workflowCanvasRef}
-                    className="relative h-[calc(100vh-20rem)] min-h-[55vh] w-full overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20"
+                    className="relative h-[calc(100dvh-14rem)] min-h-[70dvh] w-full overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20"
                   >
                     <div className="relative h-[900px] w-[1400px]">
                       <svg className="absolute inset-0" width={1400} height={900}>
