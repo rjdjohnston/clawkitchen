@@ -80,7 +80,7 @@ export default function WorkflowsClient({ teamId }: { teamId: string }) {
           </p>
         </div>
 
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-start gap-2">
           <Link
             href={`/teams/${encodeURIComponent(teamId)}/workflows/new?draft=1`}
             className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)]"
