@@ -72,23 +72,19 @@ export default function WorkflowsClient({ teamId }: { teamId: string }) {
 
   return (
     <div className="ck-glass p-6">
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-semibold">Workflows (file-first)</h2>
-          <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
-            Stored in <code>shared-context/workflows/&lt;id&gt;.workflow.json</code> inside the team workspace.
-          </p>
-        </div>
+      <div>
+        <h2 className="text-lg font-semibold">Workflows (file-first)</h2>
+        <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
+          Stored in <code>shared-context/workflows/&lt;id&gt;.workflow.json</code> inside the team workspace.
+        </p>
 
-        <div className="flex flex-wrap items-center justify-start gap-2">
+        <div className="mt-3 flex flex-wrap items-center justify-start gap-2">
           <Link
             href={`/teams/${encodeURIComponent(teamId)}/workflows/new?draft=1`}
             className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)]"
           >
             Add workflow
           </Link>
-
-          {/* (Marketing Cadence template button removed) */}
 
           <button
             type="button"
