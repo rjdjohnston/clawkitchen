@@ -175,6 +175,42 @@ export function OrchestratorPanel({ teamId }: { teamId: string }) {
       </section>
 
       <section className="mt-4 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3">
+        <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">CLI quick actions</div>
+        <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
+          The orchestrator is designed to be driven from the CLI (and usually tmux). Common commands:
+        </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[color:var(--ck-text-secondary)]">
+          <li>
+            <span className="font-mono text-xs">tmux ls</span>
+            <span className="ml-2 text-xs text-[color:var(--ck-text-tertiary)]">(list sessions)</span>
+          </li>
+          <li>
+            <span className="font-mono text-xs">tmux attach -t &lt;session&gt;</span>
+            <span className="ml-2 text-xs text-[color:var(--ck-text-tertiary)]">(jump into a running swarm)</span>
+          </li>
+          <li>
+            <span className="font-mono text-xs">git -C {state.agent.workspace} worktree list</span>
+            <span className="ml-2 text-xs text-[color:var(--ck-text-tertiary)]">(inspect worktrees)</span>
+          </li>
+        </ul>
+        <p className="mt-3 text-xs text-[color:var(--ck-text-tertiary)]">
+          Note: ClawKitchen is read-only here; it surfaces status and pointers, but does not run or attach to tmux.
+        </p>
+      </section>
+
+      <section className="mt-4 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3">
+        <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Human approval gate (recommended)</div>
+        <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
+          For workflows that publish, deploy, or send outbound messages, keep a <strong>human approval step</strong>.
+        </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[color:var(--ck-text-secondary)]">
+          <li>Generate a proposed change/post as a draft.</li>
+          <li>Send the draft to a bound messaging channel (e.g. Telegram) for approval.</li>
+          <li>Only execute the final action after explicit approve/deny.</li>
+        </ul>
+      </section>
+
+      <section className="mt-4 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3">
         <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Where to change settings</div>
         <p className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">
           These are the common knobs for a swarm/orchestrator scaffold (read-only references):
