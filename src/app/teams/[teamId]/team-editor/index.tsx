@@ -21,6 +21,7 @@ import { TeamCronTab } from "./TeamCronTab";
 import { TeamFilesTab } from "./TeamFilesTab";
 import { OrchestratorPanel } from "../OrchestratorPanel";
 import Link from "next/link";
+import WorkflowsClient from "../workflows/workflows-client";
 
 const TABS = [
   { id: "recipe" as const, label: "Recipe" },
@@ -32,7 +33,7 @@ const TABS = [
   { id: "workflows" as const, label: "Workflows" },
 ];
 
-type TabId = Exclude<(typeof TABS)[number]["id"], "workflows">;
+type TabId = (typeof TABS)[number]["id"];
 
 export default function TeamEditor({ teamId, initialTab }: { teamId: string; initialTab?: string }) {
   const router = useRouter();
@@ -373,20 +374,11 @@ export default function TeamEditor({ teamId, initialTab }: { teamId: string; ini
       ) : null}
 
       <div className="mt-6 flex flex-wrap gap-2">
-        {TABS.map((t) =>
-          t.id === "workflows" ? (
-            <Link
-              key={t.id}
-              href={`/teams/${encodeURIComponent(teamId)}/workflows`}
-              className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-white/10"
-            >
-              {t.label}
-            </Link>
-          ) : (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id as TabId)}
-              className={
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setActiveTab(t.id as TabId)}
+            className={
               activeTab === t.id
                 ? "rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)]"
                 : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] hover:bg-white/10"
@@ -394,8 +386,7 @@ export default function TeamEditor({ teamId, initialTab }: { teamId: string; ini
           >
             {t.label}
           </button>
-          )
-        )}
+        ))}
       </div>
 
       {activeTab === "recipe" && (
@@ -469,6 +460,12 @@ export default function TeamEditor({ teamId, initialTab }: { teamId: string; ini
           saving={saving}
           onCronAction={onCronAction}
         />
+      )}
+
+      {activeTab === "workflows" && (
+        <div className="mt-6">
+          <WorkflowsClient teamId={teamId} />
+        </div>
       )}
 
       {activeTab === "orchestrator" && <OrchestratorPanel teamId={teamId} />}
