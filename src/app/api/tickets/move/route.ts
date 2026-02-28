@@ -10,7 +10,7 @@ function todayUtc() {
 }
 
 async function appendDoneAuditComment(ticketIdOrNumber: string) {
-  const hit = await getTicketMarkdown("development-team", ticketIdOrNumber);
+  const hit = await getTicketMarkdown(ticketIdOrNumber);
   if (!hit) return;
 
   const line = `- ${todayUtc()} (ClawKitchen UI): Marked done from ClawKitchen UI.`;

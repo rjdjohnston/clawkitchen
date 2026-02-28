@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
+import { useToast } from "@/components/ToastProvider";
 import { errorMessage } from "@/lib/errors";
 import { fetchJson } from "@/lib/fetch-json";
 
@@ -15,6 +16,7 @@ export function TicketDetailClient(props: {
   backHref?: string;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<null | { kind: "goals" | "delete" }>(null);
@@ -113,6 +115,10 @@ export function TicketDetailClient(props: {
                     const op = kind === "goals" ? moveToGoals() : deleteTicket();
                     op
                       .then(() => {
+                        toast.push({
+                          kind: "success",
+                          message: kind === "delete" ? "Ticket deleted." : "Moved to Goals.",
+                        });
                         if (kind === "delete") {
                           router.push(props.backHref ?? "/tickets");
                         } else {
