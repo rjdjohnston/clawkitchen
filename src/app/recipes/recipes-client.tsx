@@ -270,7 +270,7 @@ export default function RecipesClient({
     if (!recipe) return null;
     const t = teamId.trim();
     if (!t) return "Team id is required.";
-    if (t === recipe.id) return `Team id cannot be the same as the recipe id (${recipe.id}). Choose a new team id.`;
+    // It is valid (and common) for teamId to equal the recipe id.
     return null;
   }
 
