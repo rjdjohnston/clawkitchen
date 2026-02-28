@@ -416,63 +416,203 @@ export default function WorkflowsEditorClient({
                     {toolsCollapsed ? ">" : "<"}
                   </button>
                 </div>
-                <div className={toolsCollapsed ? "hidden" : "mt-2 grid grid-cols-2 gap-2"}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTool({ kind: "select" });
-                      setConnectFromNodeId("");
-                    }}
-                    className={
-                      activeTool.kind === "select"
-                        ? "rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
-                        : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
-                    }
-                  >
-                    Select
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTool({ kind: "connect" });
-                      setConnectFromNodeId("");
-                    }}
-                    className={
-                      activeTool.kind === "connect"
-                        ? "rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
-                        : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
-                    }
-                    title="Click a node, then click another node to create an edge"
-                  >
-                    Connect
-                  </button>
-
-                  {([
-                    { t: "llm", label: "LLM" },
-                    { t: "tool", label: "Tool" },
-                    { t: "condition", label: "If" },
-                    { t: "delay", label: "Delay" },
-                    { t: "human_approval", label: "Approve" },
-                    { t: "end", label: "End" },
-                  ] as Array<{ t: WorkflowFileV1["nodes"][number]["type"]; label: string }>).map((x) => (
+                {toolsCollapsed ? (
+                  <div className="mt-2 flex flex-col gap-2">
+                    {(
+                      [
+                        {
+                          key: "select",
+                          label: "Select",
+                          active: activeTool.kind === "select",
+                          onClick: () => {
+                            setActiveTool({ kind: "select" });
+                            setConnectFromNodeId("");
+                          },
+                          icon: (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                              <path d="M5 4l7 16 2-7 7-2L5 4Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          key: "connect",
+                          label: "Connect",
+                          active: activeTool.kind === "connect",
+                          onClick: () => {
+                            setActiveTool({ kind: "connect" });
+                            setConnectFromNodeId("");
+                          },
+                          icon: (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                              <path d="M10 13a5 5 0 0 1 0-7l1.2-1.2a5 5 0 0 1 7 7L17 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                              <path d="M14 11a5 5 0 0 1 0 7L12.8 19.2a5 5 0 1 1-7-7L7 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          key: "llm",
+                          label: "LLM",
+                          active: activeTool.kind === "add-node" && activeTool.nodeType === "llm",
+                          onClick: () => {
+                            setActiveTool({ kind: "add-node", nodeType: "llm" });
+                            setConnectFromNodeId("");
+                          },
+                          icon: (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                              <path d="M12 2l1.5 6.5L20 10l-6.5 1.5L12 18l-1.5-6.5L4 10l6.5-1.5L12 2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          key: "tool",
+                          label: "Tool",
+                          active: activeTool.kind === "add-node" && activeTool.nodeType === "tool",
+                          onClick: () => {
+                            setActiveTool({ kind: "add-node", nodeType: "tool" });
+                            setConnectFromNodeId("");
+                          },
+                          icon: (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                              <path d="M14.5 7.5l2 2-8.5 8.5H6v-2l8.5-8.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                              <path d="M12 6a4 4 0 0 0-5 5l3-3 2 2 3-3A4 4 0 0 0 12 6Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          key: "condition",
+                          label: "If",
+                          active: activeTool.kind === "add-node" && activeTool.nodeType === "condition",
+                          onClick: () => {
+                            setActiveTool({ kind: "add-node", nodeType: "condition" });
+                            setConnectFromNodeId("");
+                          },
+                          icon: (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                              <path d="M7 4v7a3 3 0 0 0 3 3h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                              <path d="M17 10l3 3-3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          key: "delay",
+                          label: "Delay",
+                          active: activeTool.kind === "add-node" && activeTool.nodeType === "delay",
+                          onClick: () => {
+                            setActiveTool({ kind: "add-node", nodeType: "delay" });
+                            setConnectFromNodeId("");
+                          },
+                          icon: (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                              <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="M21 12a9 9 0 1 1-9-9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          key: "approval",
+                          label: "Approval",
+                          active: activeTool.kind === "add-node" && activeTool.nodeType === "human_approval",
+                          onClick: () => {
+                            setActiveTool({ kind: "add-node", nodeType: "human_approval" });
+                            setConnectFromNodeId("");
+                          },
+                          icon: (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                              <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          key: "end",
+                          label: "End",
+                          active: activeTool.kind === "add-node" && activeTool.nodeType === "end",
+                          onClick: () => {
+                            setActiveTool({ kind: "add-node", nodeType: "end" });
+                            setConnectFromNodeId("");
+                          },
+                          icon: (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                              <path d="M7 7h10v10H7V7Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                            </svg>
+                          ),
+                        },
+                      ] as const
+                    ).map((b) => (
+                      <button
+                        key={b.key}
+                        type="button"
+                        onClick={b.onClick}
+                        className={
+                          b.active
+                            ? "flex h-8 w-8 items-center justify-center rounded-[var(--ck-radius-sm)] bg-white/10 text-[color:var(--ck-text-primary)]"
+                            : "flex h-8 w-8 items-center justify-center rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                        }
+                        title={b.label}
+                        aria-label={b.label}
+                      >
+                        {b.icon}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-2 grid grid-cols-2 gap-2">
                     <button
-                      key={x.t}
                       type="button"
                       onClick={() => {
-                        setActiveTool({ kind: "add-node", nodeType: x.t });
+                        setActiveTool({ kind: "select" });
                         setConnectFromNodeId("");
                       }}
                       className={
-                        activeTool.kind === "add-node" && activeTool.nodeType === x.t
+                        activeTool.kind === "select"
                           ? "rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
                           : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
                       }
-                      title="Select tool, then click on the canvas to place"
                     >
-                      + {x.label}
+                      Select
                     </button>
-                  ))}
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTool({ kind: "connect" });
+                        setConnectFromNodeId("");
+                      }}
+                      className={
+                        activeTool.kind === "connect"
+                          ? "rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                          : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                      }
+                      title="Click a node, then click another node to create an edge"
+                    >
+                      Connect
+                    </button>
+
+                    {([
+                      { t: "llm", label: "LLM" },
+                      { t: "tool", label: "Tool" },
+                      { t: "condition", label: "If" },
+                      { t: "delay", label: "Delay" },
+                      { t: "human_approval", label: "Approve" },
+                      { t: "end", label: "End" },
+                    ] as Array<{ t: WorkflowFileV1["nodes"][number]["type"]; label: string }>).map((x) => (
+                      <button
+                        key={x.t}
+                        type="button"
+                        onClick={() => {
+                          setActiveTool({ kind: "add-node", nodeType: x.t });
+                          setConnectFromNodeId("");
+                        }}
+                        className={
+                          activeTool.kind === "add-node" && activeTool.nodeType === x.t
+                            ? "rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                            : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                        }
+                        title="Select tool, then click on the canvas to place"
+                      >
+                        + {x.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {activeTool.kind === "connect" && connectFromNodeId ? (
                   <div className="mt-2 text-xs text-[color:var(--ck-text-secondary)]">Connecting from: <span className="font-mono">{connectFromNodeId}</span></div>
@@ -482,31 +622,49 @@ export default function WorkflowsEditorClient({
                 ) : null}
 
                 <div className="mt-3 border-t border-white/10 pt-3">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className={toolsCollapsed ? "hidden" : "flex items-center justify-between gap-2"}>
                     <div className="text-[10px] font-medium uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">Agents</div>
                     <div className="text-[10px] text-[color:var(--ck-text-tertiary)]">drag → node</div>
                   </div>
-                  {agentsError ? <div className="mt-1 text-[11px] text-red-200">{agentsError}</div> : null}
-                  <div className="mt-2 max-h-[140px] space-y-1 overflow-auto">
-                    {agents.length ? (
-                      agents.map((a) => (
-                        <div
-                          key={a.id}
-                          draggable
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData("text/plain", a.id);
-                            e.dataTransfer.effectAllowed = "copy";
-                          }}
-                          className="cursor-grab rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
-                          title={a.id}
-                        >
-                          {a.identityName ? a.identityName : a.id.replace(`${teamId}-`, "")}
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-xs text-[color:var(--ck-text-tertiary)]">No team agents found.</div>
-                    )}
-                  </div>
+
+                  {toolsCollapsed ? (
+                    <button
+                      type="button"
+                      onClick={() => setToolsCollapsed(false)}
+                      className="mt-2 flex h-8 w-8 items-center justify-center rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                      title="Expand to see agents"
+                      aria-label="Expand to see agents"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                        <path d="M16 11a4 4 0 1 0-8 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                        <path d="M4 20a8 8 0 0 1 16 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <>
+                      {agentsError ? <div className="mt-1 text-[11px] text-red-200">{agentsError}</div> : null}
+                      <div className="mt-2 max-h-[140px] space-y-1 overflow-auto">
+                        {agents.length ? (
+                          agents.map((a) => (
+                            <div
+                              key={a.id}
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData("text/plain", a.id);
+                                e.dataTransfer.effectAllowed = "copy";
+                              }}
+                              className="cursor-grab rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                              title={a.id}
+                            >
+                              {a.identityName ? a.identityName : a.id.replace(`${teamId}-`, "")}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-xs text-[color:var(--ck-text-tertiary)]">No team agents found.</div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
