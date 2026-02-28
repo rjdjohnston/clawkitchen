@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { fetchJson } from "@/lib/fetch-json";
 import { errorMessage } from "@/lib/errors";
 
@@ -19,6 +20,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 export default function WorkflowsClient({ teamId }: { teamId: string }) {
+  const router = useRouter();
   const [workflows, setWorkflows] = useState<Array<{ id: string; name?: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -137,8 +139,6 @@ export default function WorkflowsClient({ teamId }: { teamId: string }) {
     }
   }
 
-  // (template button removed)
-
   const memoryUsedItems = useMemo(() => {
     const run = selectedRun;
     if (!run) return [] as Array<{ ts: string; author: string; type: string; content: string; source?: unknown }>;
@@ -172,12 +172,17 @@ export default function WorkflowsClient({ teamId }: { teamId: string }) {
         </p>
 
         <div className="mt-3 flex flex-wrap items-center justify-start gap-2">
-          <Link
-            href={`/teams/${encodeURIComponent(teamId)}/workflows/new?draft=1`}
+          <button
+            type="button"
+            onClick={() => {
+              const id = `new-${Date.now()}`;
+              router.push(`/teams/${encodeURIComponent(teamId)}/workflows/${encodeURIComponent(id)}?draft=1`);
+            }}
             className="rounded-[var(--ck-radius-sm)] bg-[var(--ck-accent-red)] px-3 py-2 text-sm font-medium text-white shadow-[var(--ck-shadow-1)]"
           >
             Add workflow
-          </Link>
+          </button>
+
 
           <button
             type="button"

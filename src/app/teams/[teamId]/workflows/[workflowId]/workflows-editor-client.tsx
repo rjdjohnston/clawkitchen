@@ -69,21 +69,26 @@ export default function WorkflowsEditorClient({
             return;
           }
 
-          // New workflow drafts should not hit the filesystem-backed API.
-          if (workflowId === "new") {
-            const empty: WorkflowFileV1 = {
-              schema: "clawkitchen.workflow.v1",
-              id: "new-workflow",
-              name: "New workflow",
-              nodes: [
-                { id: "start", type: "start", x: 80, y: 80 },
-                { id: "end", type: "end", x: 320, y: 80 },
-              ],
-              edges: [{ id: "e1", from: "start", to: "end" }],
-            };
-            setStatus({ kind: "ready", jsonText: JSON.stringify(empty, null, 2) + "\n" });
-            return;
+          // New draft: initialize a clean workflow instead of trying to fetch an existing file.
+          const initial: WorkflowFileV1 = {
+            schema: "clawkitchen.workflow.v1",
+            id: workflowId,
+            name: "New workflow",
+            timezone: "UTC",
+            nodes: [
+              { id: "start", type: "start", name: "start", x: 80, y: 80, config: {} },
+              { id: "end", type: "end", name: "end", x: 520, y: 80, config: {} },
+            ],
+            edges: [{ id: "e1", from: "start", to: "end" }],
+          };
+          const text = JSON.stringify(initial, null, 2) + "\n";
+          setStatus({ kind: "ready", jsonText: text });
+          try {
+            sessionStorage.setItem(draftKey(teamId, workflowId), text);
+          } catch {
+            // ignore
           }
+          return;
         }
 
         const res = await fetch(
