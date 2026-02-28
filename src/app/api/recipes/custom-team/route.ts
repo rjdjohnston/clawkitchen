@@ -121,7 +121,59 @@ export async function POST(req: Request) {
     lines.push("        - exec");
   }
 
-  lines.push("templates: {}");
+  lines.push("templates:");
+
+  for (const r of normalizedRoles) {
+    const roleId = r.roleId;
+
+    lines.push(`  ${roleId}.soul: |`);
+    lines.push(`    # SOUL.md`);
+    lines.push(`    `);
+    lines.push(`    Role: ${roleId}`);
+    lines.push(`    `);
+
+    lines.push(`  ${roleId}.agents: |`);
+    lines.push(`    # AGENTS.md`);
+    lines.push(`    `);
+    lines.push(`    You are the ${roleId} role in team ${teamId}.`);
+    lines.push(`    `);
+
+    lines.push(`  ${roleId}.tools: |`);
+    lines.push(`    # TOOLS.md`);
+    lines.push(`    `);
+    lines.push(`    - (empty)`);
+    lines.push(`    `);
+
+    lines.push(`  ${roleId}.status: |`);
+    lines.push(`    # STATUS.md`);
+    lines.push(`    `);
+    lines.push(`    - (empty)`);
+    lines.push(`    `);
+
+    lines.push(`  ${roleId}.notes: |`);
+    lines.push(`    # NOTES.md`);
+    lines.push(`    `);
+    lines.push(`    - (empty)`);
+    lines.push("");
+  }
+
+  lines.push("files:");
+  lines.push("  - path: SOUL.md");
+  lines.push("    template: soul");
+  lines.push("    mode: createOnly");
+  lines.push("  - path: AGENTS.md");
+  lines.push("    template: agents");
+  lines.push("    mode: createOnly");
+  lines.push("  - path: TOOLS.md");
+  lines.push("    template: tools");
+  lines.push("    mode: createOnly");
+  lines.push("  - path: STATUS.md");
+  lines.push("    template: status");
+  lines.push("    mode: createOnly");
+  lines.push("  - path: NOTES.md");
+  lines.push("    template: notes");
+  lines.push("    mode: createOnly");
+
   lines.push("---");
   lines.push("");
   lines.push("# Custom team recipe");
