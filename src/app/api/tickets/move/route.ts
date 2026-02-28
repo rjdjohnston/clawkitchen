@@ -9,8 +9,8 @@ function todayUtc() {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function appendDoneAuditComment(ticketIdOrNumber: string) {
-  const hit = await getTicketMarkdown(ticketIdOrNumber);
+async function appendDoneAuditComment(ticketIdOrNumber: string, teamId: string) {
+  const hit = await getTicketMarkdown(ticketIdOrNumber, { teamId });
   if (!hit) return;
 
   const line = `- ${todayUtc()} (ClawKitchen UI): Marked done from ClawKitchen UI.`;
@@ -32,9 +32,13 @@ async function appendDoneAuditComment(ticketIdOrNumber: string) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    const teamId = String(body.teamId ?? "").trim();
     const ticket = String(body.ticket ?? "").trim();
     const to = String(body.to ?? "").trim();
 
+    if (!teamId) {
+      return NextResponse.json({ ok: false, error: "Missing teamId" }, { status: 400 });
+    }
     if (!ticket) {
       return NextResponse.json({ ok: false, error: "Missing ticket" }, { status: 400 });
     }
@@ -46,7 +50,7 @@ export async function POST(req: Request) {
       "recipes",
       "move-ticket",
       "--team-id",
-      "development-team",
+      teamId,
       "--ticket",
       ticket,
       "--to",
@@ -58,7 +62,7 @@ export async function POST(req: Request) {
     if (!res.ok) throw new Error(res.stderr || `openclaw exit ${res.exitCode}`);
 
     if (to === "done") {
-      await appendDoneAuditComment(ticket);
+      await appendDoneAuditComment(ticket, teamId);
     }
 
     return NextResponse.json({ ok: true });
