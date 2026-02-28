@@ -417,7 +417,7 @@ export default function WorkflowsEditorClient({
                   </button>
                 </div>
                 {toolsCollapsed ? (
-                  <div className="mt-2 flex flex-col gap-2">
+                  <div className="mt-2 flex flex-col items-center gap-2">
                     {(
                       [
                         {
@@ -614,10 +614,10 @@ export default function WorkflowsEditorClient({
                   </div>
                 )}
 
-                {activeTool.kind === "connect" && connectFromNodeId ? (
+                {!toolsCollapsed && activeTool.kind === "connect" && connectFromNodeId ? (
                   <div className="mt-2 text-xs text-[color:var(--ck-text-secondary)]">Connecting from: <span className="font-mono">{connectFromNodeId}</span></div>
                 ) : null}
-                {activeTool.kind === "add-node" ? (
+                {!toolsCollapsed && activeTool.kind === "add-node" ? (
                   <div className="mt-2 text-xs text-[color:var(--ck-text-secondary)]">Click on the canvas to place a <span className="font-mono">{activeTool.nodeType}</span> node.</div>
                 ) : null}
 
