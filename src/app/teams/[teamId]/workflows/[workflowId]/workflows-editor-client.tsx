@@ -28,8 +28,6 @@ export default function WorkflowsEditorClient({
   const [actionError, setActionError] = useState<string>("");
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [toolsCollapsed, setToolsCollapsed] = useState(false);
-
   // Canvas: selection, drag, node/edge creation.
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
@@ -50,6 +48,7 @@ export default function WorkflowsEditorClient({
   const [workflowRunsLoading, setWorkflowRunsLoading] = useState(false);
   const [workflowRunsError, setWorkflowRunsError] = useState("");
   const [selectedWorkflowRunId, setSelectedWorkflowRunId] = useState<string>("");
+  const [selectedWorkflowRunJson, setSelectedWorkflowRunJson] = useState<string>("");
 
   const [newNodeId, setNewNodeId] = useState("");
   const [newNodeName, setNewNodeName] = useState("");
@@ -192,27 +191,73 @@ export default function WorkflowsEditorClient({
     URL.revokeObjectURL(url);
   }
 
+  async function refreshRuns(wfId: string) {
+    setWorkflowRunsError("");
+    setWorkflowRunsLoading(true);
+    try {
+      const listRes = await fetch(
+        `/api/teams/workflow-runs?teamId=${encodeURIComponent(teamId)}&workflowId=${encodeURIComponent(wfId)}`,
+        { cache: "no-store" }
+      );
+      const listJson = await listRes.json();
+      if (!listRes.ok || !listJson.ok) throw new Error(listJson.error || "Failed to refresh runs");
+      const files = Array.isArray(listJson.files) ? listJson.files : [];
+      const list = files.map((f: unknown) => String(f ?? "").trim()).filter((f: string) => Boolean(f));
+      setWorkflowRuns(list);
+    } catch (e: unknown) {
+      setWorkflowRunsError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setWorkflowRunsLoading(false);
+    }
+  }
+
+  async function createSampleRun(wfId: string) {
+    setWorkflowRunsError("");
+    setWorkflowRunsLoading(true);
+    try {
+      const res = await fetch("/api/teams/workflow-runs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ teamId, workflowId: wfId, mode: "sample" }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "Failed to create sample run");
+      await refreshRuns(wfId);
+    } catch (e: unknown) {
+      setWorkflowRunsError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setWorkflowRunsLoading(false);
+    }
+  }
+
+  async function loadRunDetail(wfId: string, runId: string) {
+    setSelectedWorkflowRunId(runId);
+    setSelectedWorkflowRunJson("");
+    setWorkflowRunsError("");
+    try {
+      const res = await fetch(
+        `/api/teams/workflow-runs?teamId=${encodeURIComponent(teamId)}&workflowId=${encodeURIComponent(wfId)}&runId=${encodeURIComponent(runId)}`,
+        { cache: "no-store" }
+      );
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load run");
+      setSelectedWorkflowRunJson(JSON.stringify(json.run, null, 2) + "\n");
+    } catch (e: unknown) {
+      setWorkflowRunsError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   if (status.kind === "loading") return <div className="ck-glass w-full p-6">Loading…</div>;
   if (status.kind === "error") return <div className="ck-glass w-full p-6">{status.error}</div>;
 
-  // (section collapse uses native <details> to keep this file simple)
-
   return (
-    <div className="flex h-full min-h-0 w-full flex-1 flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <a
-            href={`/teams/${encodeURIComponent(teamId)}?tab=workflows`}
-            className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
-          >
-            Back
-          </a>
-          <div className="min-w-0">
-            <div className="truncate text-base font-medium text-[color:var(--ck-text-primary)]">
-              {workflowId}.workflow.json
-            </div>
-            <div className="mt-0.5 text-sm text-[color:var(--ck-text-tertiary)]">Team: {teamId}</div>
+    <div className="ck-glass flex h-full min-h-0 w-full flex-1 flex-col p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium text-[color:var(--ck-text-primary)]">
+            Workflow editor — {workflowId}.workflow.json
           </div>
+          <div className="mt-0.5 text-xs text-[color:var(--ck-text-tertiary)]">Team: {teamId}</div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -297,7 +342,12 @@ export default function WorkflowsEditorClient({
             {saving ? "Saving…" : "Save"}
           </button>
 
-          {/* Back button lives in the left header. */}
+          <a
+            href={`/teams/${encodeURIComponent(teamId)}?tab=workflows`}
+            className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+          >
+            Workflows
+          </a>
         </div>
       </div>
 
@@ -334,7 +384,7 @@ export default function WorkflowsEditorClient({
         </div>
       ) : null}
 
-      <div className="flex min-h-0 flex-1 gap-0">
+      <div className="mt-4 flex min-h-0 flex-1 gap-3">
         {view === "json" ? (
           <textarea
             value={status.jsonText}
@@ -352,9 +402,10 @@ export default function WorkflowsEditorClient({
             className="h-full min-h-0 w-full flex-1 resize-none rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3 font-mono text-xs text-[color:var(--ck-text-primary)]"
           />
         ) : (
-          <div
-            ref={canvasRef}
-            className="relative h-full min-h-0 w-full flex-1 overflow-auto bg-black/20"
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <div
+              ref={canvasRef}
+              className="relative min-h-0 w-full flex-1 overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20"
             onClick={(e) => {
               if (activeTool.kind !== "add-node") return;
               const wf = parsed.wf;
@@ -398,221 +449,65 @@ export default function WorkflowsEditorClient({
           >
             <div className="relative h-[1200px] w-[2200px]">
               {/* Tool palette / agent palette */}
-              <div
-                className={
-                  toolsCollapsed
-                    ? "sticky left-3 top-3 z-20 w-[44px] overflow-hidden rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/40 p-2 backdrop-blur"
-                    : "sticky left-3 top-3 z-20 w-[260px] rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/40 p-2 backdrop-blur"
-                }
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className={toolsCollapsed ? "hidden" : "text-[10px] font-medium uppercase tracking-wide text-[color:var(--ck-text-tertiary)]"}>Tools</div>
+              <div className="sticky left-3 top-3 z-20 w-[260px] rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/40 p-2 backdrop-blur">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">Tools</div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setToolsCollapsed((v) => !v)}
-                    className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-[color:var(--ck-text-secondary)] hover:bg-white/10"
-                    title={toolsCollapsed ? "Expand" : "Collapse"}
+                    onClick={() => {
+                      setActiveTool({ kind: "select" });
+                      setConnectFromNodeId("");
+                    }}
+                    className={
+                      activeTool.kind === "select"
+                        ? "rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                        : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                    }
                   >
-                    {toolsCollapsed ? ">" : "<"}
+                    Select
                   </button>
-                </div>
-                {toolsCollapsed ? (
-                  <div className="mt-2 flex flex-col gap-2">
-                    {(
-                      [
-                        {
-                          key: "select",
-                          label: "Select",
-                          active: activeTool.kind === "select",
-                          onClick: () => {
-                            setActiveTool({ kind: "select" });
-                            setConnectFromNodeId("");
-                          },
-                          icon: (
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-                              <path d="M5 4l7 16 2-7 7-2L5 4Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-                            </svg>
-                          ),
-                        },
-                        {
-                          key: "connect",
-                          label: "Connect",
-                          active: activeTool.kind === "connect",
-                          onClick: () => {
-                            setActiveTool({ kind: "connect" });
-                            setConnectFromNodeId("");
-                          },
-                          icon: (
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-                              <path d="M10 13a5 5 0 0 1 0-7l1.2-1.2a5 5 0 0 1 7 7L17 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                              <path d="M14 11a5 5 0 0 1 0 7L12.8 19.2a5 5 0 1 1-7-7L7 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                            </svg>
-                          ),
-                        },
-                        {
-                          key: "llm",
-                          label: "LLM",
-                          active: activeTool.kind === "add-node" && activeTool.nodeType === "llm",
-                          onClick: () => {
-                            setActiveTool({ kind: "add-node", nodeType: "llm" });
-                            setConnectFromNodeId("");
-                          },
-                          icon: (
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-                              <path d="M12 2l1.5 6.5L20 10l-6.5 1.5L12 18l-1.5-6.5L4 10l6.5-1.5L12 2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-                            </svg>
-                          ),
-                        },
-                        {
-                          key: "tool",
-                          label: "Tool",
-                          active: activeTool.kind === "add-node" && activeTool.nodeType === "tool",
-                          onClick: () => {
-                            setActiveTool({ kind: "add-node", nodeType: "tool" });
-                            setConnectFromNodeId("");
-                          },
-                          icon: (
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-                              <path d="M14.5 7.5l2 2-8.5 8.5H6v-2l8.5-8.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-                              <path d="M12 6a4 4 0 0 0-5 5l3-3 2 2 3-3A4 4 0 0 0 12 6Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-                            </svg>
-                          ),
-                        },
-                        {
-                          key: "condition",
-                          label: "If",
-                          active: activeTool.kind === "add-node" && activeTool.nodeType === "condition",
-                          onClick: () => {
-                            setActiveTool({ kind: "add-node", nodeType: "condition" });
-                            setConnectFromNodeId("");
-                          },
-                          icon: (
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-                              <path d="M7 4v7a3 3 0 0 0 3 3h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                              <path d="M17 10l3 3-3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          ),
-                        },
-                        {
-                          key: "delay",
-                          label: "Delay",
-                          active: activeTool.kind === "add-node" && activeTool.nodeType === "delay",
-                          onClick: () => {
-                            setActiveTool({ kind: "add-node", nodeType: "delay" });
-                            setConnectFromNodeId("");
-                          },
-                          icon: (
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-                              <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                              <path d="M21 12a9 9 0 1 1-9-9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                            </svg>
-                          ),
-                        },
-                        {
-                          key: "approval",
-                          label: "Approval",
-                          active: activeTool.kind === "add-node" && activeTool.nodeType === "human_approval",
-                          onClick: () => {
-                            setActiveTool({ kind: "add-node", nodeType: "human_approval" });
-                            setConnectFromNodeId("");
-                          },
-                          icon: (
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-                              <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          ),
-                        },
-                        {
-                          key: "end",
-                          label: "End",
-                          active: activeTool.kind === "add-node" && activeTool.nodeType === "end",
-                          onClick: () => {
-                            setActiveTool({ kind: "add-node", nodeType: "end" });
-                            setConnectFromNodeId("");
-                          },
-                          icon: (
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-                              <path d="M7 7h10v10H7V7Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-                            </svg>
-                          ),
-                        },
-                      ] as const
-                    ).map((b) => (
-                      <button
-                        key={b.key}
-                        type="button"
-                        onClick={b.onClick}
-                        className={
-                          b.active
-                            ? "flex h-8 w-8 items-center justify-center rounded-[var(--ck-radius-sm)] bg-white/10 text-[color:var(--ck-text-primary)]"
-                            : "flex h-8 w-8 items-center justify-center rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 text-[color:var(--ck-text-secondary)] hover:bg-white/10"
-                        }
-                        title={b.label}
-                        aria-label={b.label}
-                      >
-                        {b.icon}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveTool({ kind: "select" });
-                        setConnectFromNodeId("");
-                      }}
-                      className={
-                        activeTool.kind === "select"
-                          ? "rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
-                          : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
-                      }
-                    >
-                      Select
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveTool({ kind: "connect" });
-                        setConnectFromNodeId("");
-                      }}
-                      className={
-                        activeTool.kind === "connect"
-                          ? "rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
-                          : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
-                      }
-                      title="Click a node, then click another node to create an edge"
-                    >
-                      Connect
-                    </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTool({ kind: "connect" });
+                      setConnectFromNodeId("");
+                    }}
+                    className={
+                      activeTool.kind === "connect"
+                        ? "rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                        : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                    }
+                    title="Click a node, then click another node to create an edge"
+                  >
+                    Connect
+                  </button>
 
-                    {([
-                      { t: "llm", label: "LLM" },
-                      { t: "tool", label: "Tool" },
-                      { t: "condition", label: "If" },
-                      { t: "delay", label: "Delay" },
-                      { t: "human_approval", label: "Approve" },
-                      { t: "end", label: "End" },
-                    ] as Array<{ t: WorkflowFileV1["nodes"][number]["type"]; label: string }>).map((x) => (
-                      <button
-                        key={x.t}
-                        type="button"
-                        onClick={() => {
-                          setActiveTool({ kind: "add-node", nodeType: x.t });
-                          setConnectFromNodeId("");
-                        }}
-                        className={
-                          activeTool.kind === "add-node" && activeTool.nodeType === x.t
-                            ? "rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
-                            : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
-                        }
-                        title="Select tool, then click on the canvas to place"
-                      >
-                        + {x.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                  {([
+                    { t: "llm", label: "LLM" },
+                    { t: "tool", label: "Tool" },
+                    { t: "condition", label: "If" },
+                    { t: "delay", label: "Delay" },
+                    { t: "human_approval", label: "Approve" },
+                    { t: "end", label: "End" },
+                  ] as Array<{ t: WorkflowFileV1["nodes"][number]["type"]; label: string }>).map((x) => (
+                    <button
+                      key={x.t}
+                      type="button"
+                      onClick={() => {
+                        setActiveTool({ kind: "add-node", nodeType: x.t });
+                        setConnectFromNodeId("");
+                      }}
+                      className={
+                        activeTool.kind === "add-node" && activeTool.nodeType === x.t
+                          ? "rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                          : "rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                      }
+                      title="Select tool, then click on the canvas to place"
+                    >
+                      + {x.label}
+                    </button>
+                  ))}
+                </div>
 
                 {activeTool.kind === "connect" && connectFromNodeId ? (
                   <div className="mt-2 text-xs text-[color:var(--ck-text-secondary)]">Connecting from: <span className="font-mono">{connectFromNodeId}</span></div>
@@ -622,49 +517,31 @@ export default function WorkflowsEditorClient({
                 ) : null}
 
                 <div className="mt-3 border-t border-white/10 pt-3">
-                  <div className={toolsCollapsed ? "hidden" : "flex items-center justify-between gap-2"}>
+                  <div className="flex items-center justify-between gap-2">
                     <div className="text-[10px] font-medium uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">Agents</div>
                     <div className="text-[10px] text-[color:var(--ck-text-tertiary)]">drag → node</div>
                   </div>
-
-                  {toolsCollapsed ? (
-                    <button
-                      type="button"
-                      onClick={() => setToolsCollapsed(false)}
-                      className="mt-2 flex h-8 w-8 items-center justify-center rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 text-[color:var(--ck-text-secondary)] hover:bg-white/10"
-                      title="Expand to see agents"
-                      aria-label="Expand to see agents"
-                    >
-                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-                        <path d="M16 11a4 4 0 1 0-8 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                        <path d="M4 20a8 8 0 0 1 16 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                      </svg>
-                    </button>
-                  ) : (
-                    <>
-                      {agentsError ? <div className="mt-1 text-[11px] text-red-200">{agentsError}</div> : null}
-                      <div className="mt-2 max-h-[140px] space-y-1 overflow-auto">
-                        {agents.length ? (
-                          agents.map((a) => (
-                            <div
-                              key={a.id}
-                              draggable
-                              onDragStart={(e) => {
-                                e.dataTransfer.setData("text/plain", a.id);
-                                e.dataTransfer.effectAllowed = "copy";
-                              }}
-                              className="cursor-grab rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
-                              title={a.id}
-                            >
-                              {a.identityName ? a.identityName : a.id.replace(`${teamId}-`, "")}
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-xs text-[color:var(--ck-text-tertiary)]">No team agents found.</div>
-                        )}
-                      </div>
-                    </>
-                  )}
+                  {agentsError ? <div className="mt-1 text-[11px] text-red-200">{agentsError}</div> : null}
+                  <div className="mt-2 max-h-[140px] space-y-1 overflow-auto">
+                    {agents.length ? (
+                      agents.map((a) => (
+                        <div
+                          key={a.id}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData("text/plain", a.id);
+                            e.dataTransfer.effectAllowed = "copy";
+                          }}
+                          className="cursor-grab rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-xs text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                          title={a.id}
+                        >
+                          {a.identityName ? a.identityName : a.id.replace(`${teamId}-`, "")}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-xs text-[color:var(--ck-text-tertiary)]">No team agents found.</div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -750,22 +627,9 @@ export default function WorkflowsEditorClient({
                       if (!el) return;
                       const rect = el.getBoundingClientRect();
                       setSelectedNodeId(n.id);
-                      try {
-                        e.currentTarget.setPointerCapture(e.pointerId);
-                      } catch {
-                        // ignore
-                      }
-                      e.preventDefault();
                       setDragging({ nodeId: n.id, dx: e.clientX - rect.left - x, dy: e.clientY - rect.top - y, left: rect.left, top: rect.top });
                     }}
-                    onPointerUp={(e) => {
-                      try {
-                        e.currentTarget.releasePointerCapture(e.pointerId);
-                      } catch {
-                        // ignore
-                      }
-                      setDragging(null);
-                    }}
+                    onPointerUp={() => setDragging(null)}
                     onPointerMove={(e) => {
                       if (!dragging) return;
                       if (dragging.nodeId !== n.id) return;
@@ -901,11 +765,98 @@ export default function WorkflowsEditorClient({
               })()}
             </div>
           </div>
+
+          {/* Runs panel (below canvas) */}
+          {parsed.wf ? (
+            <div className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Runs</div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={workflowRunsLoading}
+                    onClick={() => void refreshRuns(parsed.wf!.id)}
+                    className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10 disabled:opacity-50"
+                  >
+                    {workflowRunsLoading ? "Loading…" : "Refresh"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={workflowRunsLoading}
+                    onClick={() => void createSampleRun(parsed.wf!.id)}
+                    className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10 disabled:opacity-50"
+                  >
+                    + Sample run
+                  </button>
+                </div>
+              </div>
+
+              {workflowRunsError ? (
+                <div className="mt-2 rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 p-2 text-xs text-red-100">
+                  {workflowRunsError}
+                </div>
+              ) : null}
+
+              <div className="mt-3 grid min-h-0 grid-cols-1 gap-3 lg:grid-cols-2">
+                <div className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
+                  <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">Recent</div>
+                  <div className="mt-2 space-y-1">
+                    {workflowRunsLoading ? (
+                      <div className="text-xs text-[color:var(--ck-text-secondary)]">Loading runs…</div>
+                    ) : workflowRuns.length ? (
+                      workflowRuns.slice(0, 10).map((f) => {
+                        const runId = String(f).replace(/\.run\.json$/i, "");
+                        const selected = selectedWorkflowRunId === runId;
+                        return (
+                          <button
+                            key={f}
+                            type="button"
+                            onClick={() => void loadRunDetail(parsed.wf!.id, runId)}
+                            className={
+                              selected
+                                ? "w-full rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-left text-[11px] text-[color:var(--ck-text-primary)]"
+                                : "w-full rounded-[var(--ck-radius-sm)] px-2 py-1 text-left text-[11px] text-[color:var(--ck-text-secondary)] hover:bg-white/5"
+                            }
+                          >
+                            <span className="font-mono">{runId}</span>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="text-xs text-[color:var(--ck-text-secondary)]">No runs yet.</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
+                  <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">Detail</div>
+                  {selectedWorkflowRunId ? (
+                    <>
+                      <div className="mt-2 text-[11px] text-[color:var(--ck-text-secondary)]">
+                        Run: <span className="font-mono">{selectedWorkflowRunId}</span>
+                      </div>
+                      {selectedWorkflowRunJson ? (
+                        <pre className="mt-2 max-h-[220px] overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/30 p-2 text-[10px] text-[color:var(--ck-text-secondary)]">
+                          {selectedWorkflowRunJson}
+                        </pre>
+                      ) : (
+                        <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">Loading…</div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">Select a run.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
         )}
 
-        <div className="w-[380px] shrink-0 overflow-auto p-3 text-sm">
-          <div className="space-y-3">
-            {parsed.wf ? (
+        <div className="w-[360px] shrink-0 overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3">
+          <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Workflow</div>
+
+          {parsed.wf ? (
             (() => {
               const wf = parsed.wf;
               const tz = String(wf.timezone ?? "").trim() || "UTC";
@@ -923,28 +874,23 @@ export default function WorkflowsEditorClient({
               ];
 
               return (
-                <div className="space-y-3">
-                  <details open className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15">
-                    <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)]">Workflow</summary>
-                    <div className="px-3 pb-3">
-                      <label className="block">
-                        <div className="text-[11px] font-medium text-[color:var(--ck-text-tertiary)]">Timezone</div>
-                        <input
-                          value={tz}
-                          onChange={(e) => {
-                            const nextTz = String(e.target.value || "").trim() || "UTC";
-                            setWorkflow({ ...wf, timezone: nextTz });
-                          }}
-                          className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-sm text-[color:var(--ck-text-primary)]"
-                          placeholder="America/New_York"
-                        />
-                      </label>
-                    </div>
-                  </details>
+                <div className="mt-2 space-y-4">
+                  <label className="block">
+                    <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">timezone</div>
+                    <input
+                      value={tz}
+                      onChange={(e) => {
+                        const nextTz = String(e.target.value || "").trim() || "UTC";
+                        setWorkflow({ ...wf, timezone: nextTz });
+                      }}
+                      className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                      placeholder="America/New_York"
+                    />
+                  </label>
 
-                  <details open className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15">
-                    <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)]">Approval Channel</summary>
-                    <div className="px-3 pb-3 space-y-2">
+                  <div className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
+                    <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">approval channel (mvp)</div>
+                    <div className="mt-2 space-y-2">
                       <label className="block">
                         <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">provider</div>
                         <input
@@ -974,11 +920,9 @@ export default function WorkflowsEditorClient({
                         </div>
                       </label>
                     </div>
-                  </details>
+                  </div>
 
-                  <details open className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15">
-                    <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)]">Triggers</summary>
-                    <div className="px-3 pb-3">
+                  <div>
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">triggers</div>
                       <button
@@ -1130,104 +1074,10 @@ export default function WorkflowsEditorClient({
                         <div className="text-xs text-[color:var(--ck-text-secondary)]">No triggers yet.</div>
                       )}
                     </div>
-                    </div>
-                  </details>
+                  </div>
 
-                  <details open className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15">
-                    <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)]">Runs</summary>
-                    <div className="px-3 pb-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Runs (history)</div>
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={async () => {
-                          const wfId = String(wf.id ?? "").trim();
-                          if (!wfId) return;
-                          setWorkflowRunsError("");
-                          setWorkflowRunsLoading(true);
-                          try {
-                            const res = await fetch("/api/teams/workflow-runs", {
-                              method: "POST",
-                              headers: { "content-type": "application/json" },
-                              body: JSON.stringify({ teamId, workflowId: wfId, mode: "sample" }),
-                            });
-                            const json = await res.json();
-                            if (!res.ok || !json.ok) throw new Error(json.error || "Failed to create sample run");
-
-                            const listRes = await fetch(
-                              `/api/teams/workflow-runs?teamId=${encodeURIComponent(teamId)}&workflowId=${encodeURIComponent(wfId)}`,
-                              { cache: "no-store" }
-                            );
-                            const listJson = await listRes.json();
-                            if (!listRes.ok || !listJson.ok) throw new Error(listJson.error || "Failed to refresh runs");
-                            const files = Array.isArray(listJson.files) ? listJson.files : [];
-                            const list = files.map((f: unknown) => String(f ?? "").trim()).filter((f: string) => Boolean(f));
-                            setWorkflowRuns(list);
-                          } catch (e: unknown) {
-                            setWorkflowRunsError(e instanceof Error ? e.message : String(e));
-                          } finally {
-                            setWorkflowRunsLoading(false);
-                          }
-                        }}
-                        className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10 disabled:opacity-50"
-                      >
-                        + Sample run
-                      </button>
-                    </div>
-
-                    {workflowRunsError ? (
-                      <div className="mt-2 rounded-[var(--ck-radius-sm)] border border-red-400/30 bg-red-500/10 p-2 text-xs text-red-100">
-                        {workflowRunsError}
-                      </div>
-                    ) : null}
-
-                    <div className="mt-2 space-y-1">
-                      {workflowRunsLoading ? (
-                        <div className="text-xs text-[color:var(--ck-text-secondary)]">Loading runs…</div>
-                      ) : workflowRuns.length ? (
-                        workflowRuns.slice(0, 8).map((f) => {
-                          const runId = String(f).replace(/\.run\.json$/i, "");
-                          const selected = selectedWorkflowRunId === runId;
-                          return (
-                            <button
-                              key={f}
-                              type="button"
-                              onClick={async () => {
-                                const wfId = String(wf.id ?? "").trim();
-                                if (!wfId) return;
-                                setSelectedWorkflowRunId(runId);
-                                setWorkflowRunsError("");
-                                try {
-                                  const res = await fetch(
-                                    `/api/teams/workflow-runs?teamId=${encodeURIComponent(teamId)}&workflowId=${encodeURIComponent(wfId)}&runId=${encodeURIComponent(runId)}`,
-                                    { cache: "no-store" }
-                                  );
-                                  const json = await res.json();
-                                  if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load run");
-                                  // (run detail rendering not implemented yet; selecting stores runId only)
-                                } catch (e: unknown) {
-                                  setWorkflowRunsError(e instanceof Error ? e.message : String(e));
-                                }
-                              }}
-                              className={
-                                selected
-                                  ? "w-full rounded-[var(--ck-radius-sm)] bg-white/10 px-2 py-1 text-left text-[11px] text-[color:var(--ck-text-primary)]"
-                                  : "w-full rounded-[var(--ck-radius-sm)] px-2 py-1 text-left text-[11px] text-[color:var(--ck-text-secondary)] hover:bg-white/5"
-                              }
-                            >
-                              {runId}
-                            </button>
-                          );
-                        })
-                      ) : (
-                        <div className="text-xs text-[color:var(--ck-text-secondary)]">No runs yet.</div>
-                      )}
-                    </div>
-
-                    <details open className="mt-3 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/10">
-                      <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)]">Nodes</summary>
-                      <div className="px-3 pb-3">
+                  <div className="border-t border-white/10 pt-3">
+                    <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Nodes</div>
 
                       <div className="mt-2 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
                         <div className="grid grid-cols-1 gap-2">
@@ -1318,11 +1168,9 @@ export default function WorkflowsEditorClient({
                         })}
                       </div>
                     </div>
-                    </details>
 
-                    <details open className="mt-3 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/10">
-                      <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)]">Edges</summary>
-                      <div className="px-3 pb-3">
+                    <div className="mt-4 border-t border-white/10 pt-3">
+                      <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Edges</div>
 
                       <div className="mt-2 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
                         <div className="grid grid-cols-1 gap-2">
@@ -1416,12 +1264,10 @@ export default function WorkflowsEditorClient({
                         )}
                       </div>
                     </div>
-                    </details>
 
-                    <details open className="mt-3 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/10">
-                      <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)]">Node inspector</summary>
-                      <div className="px-3 pb-3">
-                        <div className="flex items-center justify-between gap-2">
+                    <div className="mt-4 border-t border-white/10 pt-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Node inspector</div>
                         {selectedNodeId ? (
                           <button
                             type="button"
@@ -1526,14 +1372,10 @@ export default function WorkflowsEditorClient({
                         <div className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">Select a node.</div>
                       )}
                     </div>
-                    </details>
                   </div>
-                  </details>
-                </div>
               );
             })()
           ) : null}
-          </div>
         </div>
       </div>
     </div>
