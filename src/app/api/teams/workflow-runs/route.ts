@@ -132,6 +132,7 @@ export async function POST(req: Request) {
   const action = String(o.action ?? "").trim();
   const runIdFromBody = String(o.runId ?? "").trim();
   const note = typeof o.note === "string" ? o.note : undefined;
+  const decidedBy = typeof o.decidedBy === "string" ? o.decidedBy : undefined;
 
   if (!teamId) return NextResponse.json({ ok: false, error: "teamId is required" }, { status: 400 });
   if (!workflowId) return NextResponse.json({ ok: false, error: "workflowId is required" }, { status: 400 });
@@ -170,6 +171,7 @@ export async function POST(req: Request) {
                   ...existingOutput,
                   decision: nextState,
                   note,
+                  decidedBy,
                 },
               };
             }
@@ -209,6 +211,7 @@ export async function POST(req: Request) {
           requestedAt: run.approval?.requestedAt,
           decidedAt: nextState === "changes_requested" ? undefined : decidedAt,
           note,
+          decidedBy,
         },
         nodes: nextNodes,
       };

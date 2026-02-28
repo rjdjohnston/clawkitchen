@@ -12,6 +12,8 @@ type RunDetail = {
   finishedAt?: string;
   meta?: unknown;
   memoryUsed?: unknown;
+  approval?: unknown;
+  raw?: Record<string, unknown>;
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -28,8 +30,11 @@ export default function WorkflowsClient({ teamId }: { teamId: string }) {
   const [runsByWorkflow, setRunsByWorkflow] = useState<Record<string, string[]>>({});
   const [runsLoading, setRunsLoading] = useState<Record<string, boolean>>({});
   const [selectedRunId, setSelectedRunId] = useState<string>("");
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>("");
   const [selectedRun, setSelectedRun] = useState<RunDetail | null>(null);
   const [runError, setRunError] = useState<string>("");
+  const [approvalNote, setApprovalNote] = useState<string>("");
+  const [approvalBusy, setApprovalBusy] = useState<boolean>(false);
 
   const load = useCallback(
     async (opts?: { quiet?: boolean }) => {
@@ -112,9 +117,11 @@ export default function WorkflowsClient({ teamId }: { teamId: string }) {
   }
 
   async function loadRunDetail(workflowId: string, runId: string) {
+    setSelectedWorkflowId(workflowId);
     setSelectedRunId(runId);
     setSelectedRun(null);
     setRunError("");
+    setApprovalNote("");
     try {
       const json = await fetchJson<{ ok?: boolean; run?: unknown; error?: string }>(
         `/api/teams/workflow-runs?teamId=${encodeURIComponent(teamId)}&workflowId=${encodeURIComponent(workflowId)}&runId=${encodeURIComponent(runId)}`,
@@ -127,9 +134,11 @@ export default function WorkflowsClient({ teamId }: { teamId: string }) {
         id: String(run.id ?? runId),
         status: typeof run.status === "string" ? run.status : undefined,
         startedAt: typeof run.startedAt === "string" ? run.startedAt : undefined,
-        finishedAt: typeof run.finishedAt === "string" ? run.finishedAt : undefined,
-        meta: run.meta,
+        finishedAt: typeof (run as Record<string, unknown>).finishedAt === "string" ? String((run as Record<string, unknown>).finishedAt) : undefined,
+        meta: (run as Record<string, unknown>).meta,
         memoryUsed: (run as Record<string, unknown>).memoryUsed,
+        approval: (run as Record<string, unknown>).approval,
+        raw: run,
       });
     } catch (e: unknown) {
       setRunError(errorMessage(e));
@@ -298,6 +307,115 @@ export default function WorkflowsClient({ teamId }: { teamId: string }) {
                                 <span className="font-mono">{selectedRun.id}</span>
                                 {selectedRun.status ? <span> • {selectedRun.status}</span> : null}
                               </div>
+                            </div>
+
+                            <div className="border-t border-white/10 pt-3">
+                              <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Approval</div>
+                              {(() => {
+                                const approval = selectedRun.approval;
+                                if (!isRecord(approval)) {
+                                  return <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">(No approval info recorded.)</div>;
+                                }
+
+                                const state = String(approval.state ?? "").trim();
+                                const requestedAt = typeof approval.requestedAt === "string" ? approval.requestedAt : "";
+                                const decidedAt = typeof approval.decidedAt === "string" ? approval.decidedAt : "";
+                                const decidedBy = typeof approval.decidedBy === "string" ? approval.decidedBy : "";
+                                const note = typeof approval.note === "string" ? approval.note : "";
+                                const outbound = isRecord(approval.outbound) ? approval.outbound : null;
+
+                                const canAct = state === "pending" || selectedRun.status === "waiting_for_approval";
+
+                                return (
+                                  <div className="mt-2 space-y-2">
+                                    <div className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2 text-[11px] text-[color:var(--ck-text-secondary)]">
+                                      <div>
+                                        <span className="font-mono">state</span>: <span className="font-mono text-[color:var(--ck-text-primary)]">{state || "(unknown)"}</span>
+                                      </div>
+                                      {requestedAt ? (
+                                        <div>
+                                          <span className="font-mono">requestedAt</span>: <span className="font-mono">{requestedAt}</span>
+                                        </div>
+                                      ) : null}
+                                      {decidedAt ? (
+                                        <div>
+                                          <span className="font-mono">decidedAt</span>: <span className="font-mono">{decidedAt}</span>
+                                        </div>
+                                      ) : null}
+                                      {decidedBy ? (
+                                        <div>
+                                          <span className="font-mono">decidedBy</span>: <span className="font-mono">{decidedBy}</span>
+                                        </div>
+                                      ) : null}
+                                      {note ? (
+                                        <div className="mt-1 whitespace-pre-wrap text-xs text-[color:var(--ck-text-primary)]">{note}</div>
+                                      ) : null}
+                                      {outbound ? (
+                                        <div className="mt-2 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/30 p-2 text-[10px]">
+                                          <div className="text-[color:var(--ck-text-tertiary)]">Outbound</div>
+                                          <pre className="mt-1 overflow-auto whitespace-pre-wrap">{JSON.stringify(outbound, null, 2)}</pre>
+                                        </div>
+                                      ) : null}
+                                    </div>
+
+                                    {canAct ? (
+                                      <div className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-2">
+                                        <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">approval note (optional)</div>
+                                        <textarea
+                                          value={approvalNote}
+                                          onChange={(e) => setApprovalNote(e.target.value)}
+                                          rows={3}
+                                          className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
+                                          placeholder="e.g. Ship it / please tweak hook"
+                                        />
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                          {([
+                                            { action: "approve", label: "Approve" },
+                                            { action: "request_changes", label: "Request changes" },
+                                            { action: "cancel", label: "Cancel" },
+                                          ] as const).map((btn) => (
+                                            <button
+                                              key={btn.action}
+                                              type="button"
+                                              disabled={approvalBusy}
+                                              onClick={async () => {
+                                                if (!selectedWorkflowId || !selectedRunId) return;
+                                                if (!confirm(`${btn.label} run ${selectedRunId}?`)) return;
+                                                setApprovalBusy(true);
+                                                setRunError("");
+                                                try {
+                                                  const res = await fetch("/api/teams/workflow-runs", {
+                                                    method: "POST",
+                                                    headers: { "content-type": "application/json" },
+                                                    body: JSON.stringify({
+                                                      teamId,
+                                                      workflowId: selectedWorkflowId,
+                                                      runId: selectedRunId,
+                                                      action: btn.action,
+                                                      note: approvalNote || undefined,
+                                                      decidedBy: "ClawKitchen UI",
+                                                    }),
+                                                  });
+                                                  const json = await res.json();
+                                                  if (!res.ok || !json.ok) throw new Error(json.error || "Failed to apply approval action");
+                                                  await loadRunDetail(selectedWorkflowId, selectedRunId);
+                                                } catch (e: unknown) {
+                                                  setRunError(errorMessage(e));
+                                                } finally {
+                                                  setApprovalBusy(false);
+                                                }
+                                              }}
+                                              className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10 disabled:opacity-60"
+                                            >
+                                              {btn.label}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })()}
                             </div>
 
                             <div className="border-t border-white/10 pt-3">
