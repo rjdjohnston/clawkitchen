@@ -62,7 +62,12 @@ export function validateWorkflowFileV1(wf: WorkflowFileV1): WorkflowValidationRe
       if (!String(t.id || "").trim()) errors.push("cron trigger missing id");
       if (!String(t.expr || "").trim()) errors.push(`cron trigger ${String(t.id || "(missing id)")} missing expr`);
       else if (!isFiveFieldCron(t.expr)) warnings.push(`cron trigger ${String(t.id)} expr is not 5-field: ${String(t.expr)}`);
-      if (t.tz && !String(t.tz).includes("/")) warnings.push(`cron trigger ${String(t.id)} tz doesn't look like an IANA timezone: ${String(t.tz)}`);
+      const tz = t.tz ? String(t.tz).trim() : "";
+      // NOTE: We commonly use "UTC" as a default, and it is widely accepted even though it isn't in the
+      // classic Region/City IANA format. Treat it as valid to avoid noisy validation warnings.
+      if (tz && tz !== "UTC" && !tz.includes("/")) {
+        warnings.push(`cron trigger ${String(t.id)} tz doesn't look like an IANA timezone: ${String(t.tz)}`);
+      }
     }
   }
 
