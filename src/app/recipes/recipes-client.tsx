@@ -9,6 +9,7 @@ import { pollUntil } from "@/lib/poll";
 import { fetchScaffold } from "@/lib/scaffold-client";
 import { useToast } from "@/components/ToastProvider";
 import { CreateTeamModal } from "./CreateTeamModal";
+import { CreateCustomTeamModal } from "./CreateCustomTeamModal";
 import { CreateAgentModal } from "./CreateAgentModal";
 import { DeleteRecipeModal } from "@/components/delete-modals";
 import { errorMessage } from "@/lib/errors";
@@ -153,6 +154,14 @@ export default function RecipesClient({
   const [createAgentBusy, setCreateAgentBusy] = useState(false);
   const [createAgentError, setCreateAgentError] = useState<string | null>(null);
 
+  const [createCustomTeamOpen, setCreateCustomTeamOpen] = useState(false);
+  const [createCustomTeamId, setCreateCustomTeamId] = useState<string>("");
+  const [createCustomTeamBusy, setCreateCustomTeamBusy] = useState(false);
+  const [createCustomTeamError, setCreateCustomTeamError] = useState<string | null>(null);
+  const [customTeamRoles, setCustomTeamRoles] = useState<Array<{ agentId: string; roleId: string; displayName: string }>>(
+    [],
+  );
+
   const onDelete = (id: string) => {
     setDeleteId(id);
     setModalError(null);
@@ -173,6 +182,13 @@ export default function RecipesClient({
     setCreateAgentName("");
     setCreateAgentError(null);
     setCreateAgentOpen(true);
+  };
+
+  const onCreateCustomTeam = () => {
+    setCreateCustomTeamId("");
+    setCustomTeamRoles([]);
+    setCreateCustomTeamError(null);
+    setCreateCustomTeamOpen(true);
   };
 
   async function confirmDelete() {
@@ -408,6 +424,64 @@ export default function RecipesClient({
     });
   }
 
+  async function confirmCreateCustomTeam() {
+    const teamId = createCustomTeamId.trim();
+    if (!teamId) {
+      setCreateCustomTeamError("Team id is required.");
+      return;
+    }
+    if (customTeamRoles.length < 1) {
+      setCreateCustomTeamError("Select at least one agent.");
+      return;
+    }
+
+    setCreateCustomTeamError(null);
+
+    try {
+      setCreateCustomTeamBusy(true);
+      const createRes = await fetchJsonWithStatus<{ ok?: boolean; error?: string; recipeId?: string }>(
+        "/api/recipes/custom-team",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            recipeId: teamId,
+            teamId,
+            roles: customTeamRoles.map((r) => ({ roleId: r.roleId, displayName: r.displayName })),
+          }),
+        },
+      );
+      setCreateCustomTeamBusy(false);
+
+      if (!createRes.ok) {
+        throw new Error(createRes.error);
+      }
+      if (!createRes.data.ok) {
+        throw new Error(createRes.data.error || "Failed to create custom team recipe");
+      }
+
+      await scaffoldWithOverlay({
+        kind: "team",
+        recipeId: teamId,
+        teamId,
+        cronInstallChoice: "no",
+        setBusy: setCreateCustomTeamBusy,
+        setError: setCreateCustomTeamError,
+        setModalOpen: setCreateCustomTeamOpen,
+        setOverlayOpen,
+        setOverlayStep,
+        successMessage: `Created team: ${teamId}`,
+        navigateTo: `/teams/${encodeURIComponent(teamId)}`,
+        waitBeforeNavigate: () => waitForTeamPageReady(teamId, { timeoutMs: 60_000 }),
+      });
+    } catch (e: unknown) {
+      setCreateCustomTeamBusy(false);
+      const msg = errorMessage(e);
+      setCreateCustomTeamError(msg);
+      toast.push({ kind: "error", message: msg });
+    }
+  }
+
   return (
     <>
       <ScaffoldOverlay
@@ -419,10 +493,21 @@ export default function RecipesClient({
       />
       <div className="mt-8 space-y-10">
         <section>
-          <h2 className="text-xl font-semibold tracking-tight text-[color:var(--ck-text-primary)]">Custom recipes</h2>
-          <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
-            Workspace recipes (editable) — stored under <code className="font-mono">~/.openclaw/workspace/recipes/</code>.
-          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight text-[color:var(--ck-text-primary)]">Custom recipes</h2>
+              <p className="mt-1 text-sm text-[color:var(--ck-text-secondary)]">
+                Workspace recipes (editable) — stored under <code className="font-mono">~/.openclaw/workspace/recipes/</code>.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onCreateCustomTeam}
+              className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-white/10 active:bg-white/15"
+            >
+              Create custom team
+            </button>
+          </div>
 
           <div className="mt-4 space-y-8">
             <RecipesSection
@@ -465,6 +550,17 @@ export default function RecipesClient({
         error={modalError}
         onClose={() => setDeleteOpen(false)}
         onConfirm={confirmDelete}
+      />
+
+      <CreateCustomTeamModal
+        open={createCustomTeamOpen}
+        teamId={createCustomTeamId}
+        setTeamId={setCreateCustomTeamId}
+        busy={createCustomTeamBusy}
+        error={createCustomTeamError}
+        onRolesChange={setCustomTeamRoles}
+        onClose={() => setCreateCustomTeamOpen(false)}
+        onConfirm={confirmCreateCustomTeam}
       />
 
       <CreateTeamModal
