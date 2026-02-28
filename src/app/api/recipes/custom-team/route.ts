@@ -50,6 +50,12 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  if (!teamId.endsWith("-team")) {
+    return NextResponse.json(
+      { ok: false, error: "teamId must end with -team" },
+      { status: 400 },
+    );
+  }
 
   if (roles.length < 1) {
     return NextResponse.json({ ok: false, error: "Select at least one role/agent" }, { status: 400 });

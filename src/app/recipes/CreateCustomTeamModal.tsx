@@ -24,6 +24,11 @@ function isValidId(id: string) {
   return /^[a-z0-9][a-z0-9_-]{1,62}$/.test(id);
 }
 
+function isValidTeamId(id: string) {
+  // OpenClaw scaffold-team constraint.
+  return isValidId(id) && id.endsWith("-team");
+}
+
 export function CreateCustomTeamModal({
   open,
   teamId,
@@ -99,6 +104,9 @@ export function CreateCustomTeamModal({
     if (!isValidId(teamIdTrimmed)) {
       return "Invalid team id. Use lowercase letters/numbers with - or _ (2-63 chars).";
     }
+    if (!teamIdTrimmed.endsWith("-team")) {
+      return "Team id must end with -team.";
+    }
     if (availability.state === "taken") {
       return `Team id is already taken: ${teamIdTrimmed}`;
     }
@@ -138,7 +146,7 @@ export function CreateCustomTeamModal({
 
     let cancelled = false;
     const t = setTimeout(async () => {
-      if (!teamIdTrimmed || !isValidId(teamIdTrimmed)) {
+      if (!teamIdTrimmed || !isValidTeamId(teamIdTrimmed)) {
         setAvailability({ state: "unknown" });
         return;
       }
