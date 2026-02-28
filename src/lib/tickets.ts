@@ -119,7 +119,7 @@ export async function listTickets(): Promise<TicketSummary[]> {
   return all;
 }
 
-export async function getTicketMarkdown(ticketIdOrNumber: string): Promise<{ id: string; file: string; markdown: string } | null> {
+export async function getTicketByIdOrNumber(ticketIdOrNumber: string): Promise<TicketSummary | null> {
   const tickets = await listTickets();
   const normalized = ticketIdOrNumber.trim();
 
@@ -129,12 +129,20 @@ export async function getTicketMarkdown(ticketIdOrNumber: string): Promise<{ id:
 
   const byId = tickets.find((t) => t.id === normalized);
 
-  const hit = byId ?? byNumber;
+  return byId ?? byNumber ?? null;
+}
+
+export async function getTicketMarkdown(
+  ticketIdOrNumber: string,
+): Promise<{ id: string; file: string; markdown: string; owner: string | null; stage: TicketStage } | null> {
+  const hit = await getTicketByIdOrNumber(ticketIdOrNumber);
   if (!hit) return null;
 
   return {
     id: hit.id,
     file: hit.file,
     markdown: await fs.readFile(hit.file, "utf8"),
+    owner: hit.owner,
+    stage: hit.stage,
   };
 }

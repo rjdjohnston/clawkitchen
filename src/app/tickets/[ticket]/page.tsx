@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getTicketMarkdown } from "@/lib/tickets";
+import { TicketAssignControl } from "./TicketAssignControl";
 
 // Ticket detail should always reflect current stage/file; do not cache.
 export const dynamic = "force-dynamic";
@@ -36,6 +37,8 @@ export default async function TicketDetailPage({
         </Link>
         <span className="text-xs text-[color:var(--ck-text-tertiary)]">{data.file}</span>
       </div>
+
+      <TicketAssignControl ticket={ticket} currentOwner={data.owner} />
 
       <div className="ck-glass p-6">
         <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-[color:var(--ck-text-primary)]">
