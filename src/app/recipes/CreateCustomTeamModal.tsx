@@ -14,6 +14,19 @@ function defaultRoleIdFromAgentId(agentId: string) {
   return last.toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
 }
 
+function inferTeamIdFromWorkspace(workspace: string | undefined) {
+  if (!workspace) return null;
+  const parts = workspace.split("/").filter(Boolean);
+  const wsPart = parts.find((p) => p.startsWith("workspace-")) ?? "";
+  if (!wsPart) return null;
+  const team = wsPart.slice("workspace-".length);
+  return team || null;
+}
+
+function isValidId(id: string) {
+  return /^[a-z0-9][a-z0-9_-]{1,62}$/.test(id);
+}
+
 export function CreateCustomTeamModal({
   open,
   teamId,
@@ -37,6 +50,10 @@ export function CreateCustomTeamModal({
   const [agentsError, setAgentsError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Record<string, SelectedRole>>({});
 
+  const [previewMd, setPreviewMd] = useState<string | null>(null);
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -58,6 +75,14 @@ export function CreateCustomTeamModal({
     };
   }, []);
 
+  const existingTeamIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const a of agents) {
+      const t = inferTeamIdFromWorkspace(a.workspace);
+      if (t) s.add(t);
+    }
+    return s;
+  }, [agents]);
 
   const agentChoices = useMemo(() => {
     return agents
@@ -72,10 +97,89 @@ export function CreateCustomTeamModal({
 
   const roles = useMemo(() => Object.values(selected), [selected]);
 
+  const teamIdTrimmed = teamId.trim();
+  const teamIdError = useMemo(() => {
+    if (!open) return null;
+    if (!teamIdTrimmed) return "Team id is required.";
+    if (!isValidId(teamIdTrimmed)) {
+      return "Invalid team id. Use lowercase letters/numbers with - or _ (2-63 chars).";
+    }
+    if (existingTeamIds.has(teamIdTrimmed)) {
+      return `Team already exists: ${teamIdTrimmed}`;
+    }
+    return null;
+  }, [open, teamIdTrimmed, existingTeamIds]);
+
+  const roleErrors = useMemo(() => {
+    const errors = new Map<string, string>();
+    for (const r of roles) {
+      const roleId = String(r.roleId ?? "").trim();
+      if (!roleId) {
+        errors.set(r.agentId, "Role id is required.");
+        continue;
+      }
+      if (!isValidId(roleId)) {
+        errors.set(r.agentId, "Invalid role id (lowercase letters/numbers with - or _)." );
+      }
+    }
+    return errors;
+  }, [roles]);
+
+  const canConfirm = !teamIdError && roles.length > 0 && roleErrors.size === 0;
+
   useEffect(() => {
     if (!open) return;
     onRolesChange(roles);
   }, [open, roles, onRolesChange]);
+
+  // Best-effort preview (debounced).
+  useEffect(() => {
+    if (!open) return;
+    if (!canConfirm) return;
+
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const res = await fetchJsonWithStatus<{
+        ok?: boolean;
+        error?: string;
+        md?: string;
+        filePath?: string;
+      }>("/api/recipes/custom-team", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          dryRun: true,
+          recipeId: teamIdTrimmed,
+          teamId: teamIdTrimmed,
+          roles: roles.map((r) => ({ roleId: r.roleId, displayName: r.displayName })),
+        }),
+      });
+
+      if (cancelled) return;
+
+      if (!res.ok) {
+        setPreviewError(res.error);
+        setPreviewMd(null);
+        setPreviewPath(null);
+        return;
+      }
+      if (!res.data.ok) {
+        setPreviewError(res.data.error || "Failed to generate preview");
+        setPreviewMd(null);
+        setPreviewPath(null);
+        return;
+      }
+
+      setPreviewError(null);
+      setPreviewMd(typeof res.data.md === "string" ? res.data.md : null);
+      setPreviewPath(typeof res.data.filePath === "string" ? res.data.filePath : null);
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [open, canConfirm, teamIdTrimmed, roles]);
 
   return (
     <CreateModalShell
@@ -85,7 +189,7 @@ export function CreateCustomTeamModal({
       recipeName={"Custom Team"}
       error={error || agentsError}
       busy={busy}
-      canConfirm={!!teamId.trim() && roles.length > 0}
+      canConfirm={canConfirm}
       onClose={onClose}
       onConfirm={onConfirm}
       confirmLabel="Create team"
@@ -99,6 +203,7 @@ export function CreateCustomTeamModal({
           className="mt-2 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)]"
           autoFocus
         />
+        {teamIdError ? <div className="mt-2 text-xs text-red-300">{teamIdError}</div> : null}
         <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
           This creates a new team recipe under <code>~/.openclaw/workspace/recipes</code> and scaffolds
           <code className="ml-1">~/.openclaw/workspace-&lt;teamId&gt;</code>.
@@ -151,44 +256,65 @@ export function CreateCustomTeamModal({
         <div className="mt-6">
           <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Role mapping</div>
           <div className="mt-3 space-y-3">
-            {roles.map((r) => (
-              <div key={r.agentId} className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 p-3">
-                <div className="text-xs text-[color:var(--ck-text-tertiary)]">{r.agentId}</div>
+            {roles.map((r) => {
+              const roleErr = roleErrors.get(r.agentId);
+              return (
+                <div key={r.agentId} className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 p-3">
+                  <div className="text-xs text-[color:var(--ck-text-tertiary)]">{r.agentId}</div>
 
-                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Role id</label>
-                    <input
-                      value={r.roleId}
-                      onChange={(e) => {
-                        setSelected((prev) => ({
-                          ...prev,
-                          [r.agentId]: { ...prev[r.agentId], roleId: e.target.value },
-                        }));
-                      }}
-                      className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-                    />
-                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Role id</label>
+                      <input
+                        value={r.roleId}
+                        onChange={(e) => {
+                          setSelected((prev) => ({
+                            ...prev,
+                            [r.agentId]: { ...prev[r.agentId], roleId: e.target.value },
+                          }));
+                        }}
+                        className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
+                      />
+                      {roleErr ? <div className="mt-1 text-xs text-red-300">{roleErr}</div> : null}
+                    </div>
 
-                  <div>
-                    <label className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Display name</label>
-                    <input
-                      value={r.displayName}
-                      onChange={(e) => {
-                        setSelected((prev) => ({
-                          ...prev,
-                          [r.agentId]: { ...prev[r.agentId], displayName: e.target.value },
-                        }));
-                      }}
-                      className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
-                    />
+                    <div>
+                      <label className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Display name</label>
+                      <input
+                        value={r.displayName}
+                        onChange={(e) => {
+                          setSelected((prev) => ({
+                            ...prev,
+                            [r.agentId]: { ...prev[r.agentId], displayName: e.target.value },
+                          }));
+                        }}
+                        className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)]"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : null}
+
+      <div className="mt-6">
+        <div className="text-sm font-medium text-[color:var(--ck-text-primary)]">Preview</div>
+        <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
+          Generated recipe preview (best-effort). This is what will be written to
+          <code className="ml-1">~/.openclaw/workspace/recipes/&lt;teamId&gt;.md</code>.
+        </div>
+        {canConfirm && previewError ? <div className="mt-2 text-xs text-red-300">{previewError}</div> : null}
+        {canConfirm && previewPath ? (
+          <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
+            Target path: <code>{previewPath}</code>
+          </div>
+        ) : null}
+        <pre className="mt-3 max-h-[260px] overflow-auto whitespace-pre-wrap rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/30 p-3 text-xs text-[color:var(--ck-text-secondary)]">
+          {canConfirm ? previewMd || "(Loading preview…)" : "(Select a valid team id and at least one agent to preview.)"}
+        </pre>
+      </div>
     </CreateModalShell>
   );
 }

@@ -123,11 +123,13 @@ export default function RecipesClient({
   customTeamRecipes,
   customAgentRecipes,
   installedAgentIds,
+  initialOpenCustomTeam = false,
 }: {
   builtin: Recipe[];
   customTeamRecipes: Recipe[];
   customAgentRecipes: Recipe[];
   installedAgentIds: string[];
+  initialOpenCustomTeam?: boolean;
 }) {
   const toast = useToast();
 
@@ -154,7 +156,7 @@ export default function RecipesClient({
   const [createAgentBusy, setCreateAgentBusy] = useState(false);
   const [createAgentError, setCreateAgentError] = useState<string | null>(null);
 
-  const [createCustomTeamOpen, setCreateCustomTeamOpen] = useState(false);
+  const [createCustomTeamOpen, setCreateCustomTeamOpen] = useState(initialOpenCustomTeam);
   const [createCustomTeamId, setCreateCustomTeamId] = useState<string>("");
   const [createCustomTeamBusy, setCreateCustomTeamBusy] = useState(false);
   const [createCustomTeamError, setCreateCustomTeamError] = useState<string | null>(null);

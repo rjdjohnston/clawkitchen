@@ -21,6 +21,7 @@ function yamlEscape(s: string) {
 
 export async function POST(req: Request) {
   const body = (await req.json()) as {
+    dryRun?: boolean;
     recipeId?: string;
     teamId?: string;
     name?: string;
@@ -28,6 +29,7 @@ export async function POST(req: Request) {
     roles?: Array<{ roleId?: string; displayName?: string }>;
   };
 
+  const dryRun = !!body.dryRun;
   const recipeId = String(body.recipeId ?? body.teamId ?? "").trim();
   const teamId = String(body.teamId ?? recipeId).trim();
   const name = typeof body.name === "string" ? body.name.trim() : "";
@@ -122,6 +124,11 @@ export async function POST(req: Request) {
   lines.push("");
 
   const md = lines.join("\n");
+
+  if (dryRun) {
+    return NextResponse.json({ ok: true, dryRun: true, recipeId, teamId, filePath, md });
+  }
+
   await fs.writeFile(filePath, md, "utf8");
 
   return NextResponse.json({ ok: true, recipeId, teamId, filePath });
