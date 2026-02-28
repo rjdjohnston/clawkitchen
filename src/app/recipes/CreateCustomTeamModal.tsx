@@ -14,13 +14,10 @@ function defaultRoleIdFromAgentId(agentId: string) {
   return last.toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
 }
 
-function inferTeamIdFromWorkspace(workspace: string | undefined) {
-  if (!workspace) return null;
-  const parts = workspace.split("/").filter(Boolean);
-  const wsPart = parts.find((p) => p.startsWith("workspace-")) ?? "";
-  if (!wsPart) return null;
-  const team = wsPart.slice("workspace-".length);
-  return team || null;
+function normalizeTeamIdInput(v: string) {
+  // UX: when the user types spaces, turn them into dashes (live).
+  // Also keep it lowercase to match id rules.
+  return v.toLowerCase().replace(/\s+/g, "-");
 }
 
 function isValidId(id: string) {
@@ -75,14 +72,12 @@ export function CreateCustomTeamModal({
     };
   }, []);
 
-  const existingTeamIds = useMemo(() => {
-    const s = new Set<string>();
-    for (const a of agents) {
-      const t = inferTeamIdFromWorkspace(a.workspace);
-      if (t) s.add(t);
-    }
-    return s;
-  }, [agents]);
+  const [availability, setAvailability] = useState<
+    | { state: "unknown" }
+    | { state: "checking" }
+    | { state: "available" }
+    | { state: "taken"; reason?: string }
+  >({ state: "unknown" });
 
   const agentChoices = useMemo(() => {
     return agents
@@ -104,11 +99,11 @@ export function CreateCustomTeamModal({
     if (!isValidId(teamIdTrimmed)) {
       return "Invalid team id. Use lowercase letters/numbers with - or _ (2-63 chars).";
     }
-    if (existingTeamIds.has(teamIdTrimmed)) {
-      return `Team already exists: ${teamIdTrimmed}`;
+    if (availability.state === "taken") {
+      return `Team id is already taken: ${teamIdTrimmed}`;
     }
     return null;
-  }, [open, teamIdTrimmed, existingTeamIds]);
+  }, [open, teamIdTrimmed, availability.state]);
 
   const roleErrors = useMemo(() => {
     const errors = new Map<string, string>();
@@ -125,12 +120,56 @@ export function CreateCustomTeamModal({
     return errors;
   }, [roles]);
 
-  const canConfirm = !teamIdError && roles.length > 0 && roleErrors.size === 0;
+  const canConfirm =
+    !teamIdError &&
+    availability.state !== "checking" &&
+    availability.state !== "unknown" &&
+    roles.length > 0 &&
+    roleErrors.size === 0;
 
   useEffect(() => {
     if (!open) return;
     onRolesChange(roles);
   }, [open, roles, onRolesChange]);
+
+  // Team id availability check (debounced).
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      if (!teamIdTrimmed || !isValidId(teamIdTrimmed)) {
+        setAvailability({ state: "unknown" });
+        return;
+      }
+
+      setAvailability({ state: "checking" });
+
+      const res = await fetchJsonWithStatus<{ ok?: boolean; available?: boolean; reason?: string; error?: string }>(
+        `/api/ids/check?kind=team&id=${encodeURIComponent(teamIdTrimmed)}`,
+        { cache: "no-store" },
+      );
+
+      if (cancelled) return;
+
+      if (!res.ok) {
+        setAvailability({ state: "unknown" });
+        return;
+      }
+
+      if (res.data.ok && res.data.available === true) {
+        setAvailability({ state: "available" });
+        return;
+      }
+
+      setAvailability({ state: "taken", reason: res.data.reason });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [open, teamIdTrimmed]);
 
   // Best-effort preview (debounced).
   useEffect(() => {
@@ -198,12 +237,18 @@ export function CreateCustomTeamModal({
         <label className="text-sm font-medium text-[color:var(--ck-text-primary)]">Team id</label>
         <input
           value={teamId}
-          onChange={(e) => setTeamId(e.target.value)}
+          onChange={(e) => setTeamId(normalizeTeamIdInput(e.target.value))}
           placeholder="e.g. my-team"
           className="mt-2 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm text-[color:var(--ck-text-primary)] placeholder:text-[color:var(--ck-text-tertiary)]"
           autoFocus
         />
         {teamIdError ? <div className="mt-2 text-xs text-red-300">{teamIdError}</div> : null}
+        {!teamIdError && teamIdTrimmed ? (
+          <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
+            {availability.state === "checking" ? "Checking availability…" : null}
+            {availability.state === "available" ? "Available." : null}
+          </div>
+        ) : null}
         <div className="mt-2 text-xs text-[color:var(--ck-text-tertiary)]">
           This creates a new team recipe under <code>~/.openclaw/workspace/recipes</code> and scaffolds
           <code className="ml-1">~/.openclaw/workspace-&lt;teamId&gt;</code>.
