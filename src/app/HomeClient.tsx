@@ -105,6 +105,12 @@ export default function HomeClient({
 
         <div className="flex flex-col items-start gap-2 sm:items-end">
           <Link
+            href="/recipes?createCustomTeam=1"
+            className="rounded-[var(--ck-radius-sm)] border border-[color:var(--ck-border-subtle)] bg-[color:var(--ck-bg-glass)] px-3 py-1.5 text-sm font-medium text-[color:var(--ck-text-primary)] shadow-[var(--ck-shadow-1)] transition-colors hover:bg-[color:var(--ck-bg-glass-strong)]"
+          >
+            Create team
+          </Link>
+          <Link
             href="/recipes"
             className="text-sm font-medium text-[color:var(--ck-text-secondary)] transition-colors hover:text-[color:var(--ck-text-primary)]"
           >
