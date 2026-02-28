@@ -28,6 +28,8 @@ export default function WorkflowsEditorClient({
   const [actionError, setActionError] = useState<string>("");
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
+  const [toolsCollapsed, setToolsCollapsed] = useState(false);
+
   // Canvas: selection, drag, node/edge creation.
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
@@ -193,14 +195,24 @@ export default function WorkflowsEditorClient({
   if (status.kind === "loading") return <div className="ck-glass w-full p-6">Loading…</div>;
   if (status.kind === "error") return <div className="ck-glass w-full p-6">{status.error}</div>;
 
+  // (section collapse uses native <details> to keep this file simple)
+
   return (
-    <div className="ck-glass flex h-full min-h-0 w-full flex-1 flex-col p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium text-[color:var(--ck-text-primary)]">
-            Workflow editor — {workflowId}.workflow.json
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <a
+            href={`/teams/${encodeURIComponent(teamId)}?tab=workflows`}
+            className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+          >
+            Back
+          </a>
+          <div className="min-w-0">
+            <div className="truncate text-base font-medium text-[color:var(--ck-text-primary)]">
+              {workflowId}.workflow.json
+            </div>
+            <div className="mt-0.5 text-sm text-[color:var(--ck-text-tertiary)]">Team: {teamId}</div>
           </div>
-          <div className="mt-0.5 text-xs text-[color:var(--ck-text-tertiary)]">Team: {teamId}</div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -285,12 +297,7 @@ export default function WorkflowsEditorClient({
             {saving ? "Saving…" : "Save"}
           </button>
 
-          <a
-            href={`/teams/${encodeURIComponent(teamId)}?tab=workflows`}
-            className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
-          >
-            Workflows
-          </a>
+          {/* Back button lives in the left header. */}
         </div>
       </div>
 
@@ -327,7 +334,7 @@ export default function WorkflowsEditorClient({
         </div>
       ) : null}
 
-      <div className="mt-4 flex min-h-0 flex-1 gap-3">
+      <div className="flex min-h-0 flex-1 gap-0">
         {view === "json" ? (
           <textarea
             value={status.jsonText}
@@ -347,7 +354,7 @@ export default function WorkflowsEditorClient({
         ) : (
           <div
             ref={canvasRef}
-            className="relative h-full min-h-0 w-full flex-1 overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20"
+            className="relative h-full min-h-0 w-full flex-1 overflow-auto bg-black/20"
             onClick={(e) => {
               if (activeTool.kind !== "add-node") return;
               const wf = parsed.wf;
@@ -391,9 +398,25 @@ export default function WorkflowsEditorClient({
           >
             <div className="relative h-[1200px] w-[2200px]">
               {/* Tool palette / agent palette */}
-              <div className="sticky left-3 top-3 z-20 w-[260px] rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/40 p-2 backdrop-blur">
-                <div className="text-[10px] font-medium uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">Tools</div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
+              <div
+                className={
+                  toolsCollapsed
+                    ? "sticky left-3 top-3 z-20 w-[44px] overflow-hidden rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/40 p-2 backdrop-blur"
+                    : "sticky left-3 top-3 z-20 w-[260px] rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/40 p-2 backdrop-blur"
+                }
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className={toolsCollapsed ? "hidden" : "text-[10px] font-medium uppercase tracking-wide text-[color:var(--ck-text-tertiary)]"}>Tools</div>
+                  <button
+                    type="button"
+                    onClick={() => setToolsCollapsed((v) => !v)}
+                    className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-[color:var(--ck-text-secondary)] hover:bg-white/10"
+                    title={toolsCollapsed ? "Expand" : "Collapse"}
+                  >
+                    {toolsCollapsed ? ">" : "<"}
+                  </button>
+                </div>
+                <div className={toolsCollapsed ? "hidden" : "mt-2 grid grid-cols-2 gap-2"}>
                   <button
                     type="button"
                     onClick={() => {
@@ -569,9 +592,22 @@ export default function WorkflowsEditorClient({
                       if (!el) return;
                       const rect = el.getBoundingClientRect();
                       setSelectedNodeId(n.id);
+                      try {
+                        e.currentTarget.setPointerCapture(e.pointerId);
+                      } catch {
+                        // ignore
+                      }
+                      e.preventDefault();
                       setDragging({ nodeId: n.id, dx: e.clientX - rect.left - x, dy: e.clientY - rect.top - y, left: rect.left, top: rect.top });
                     }}
-                    onPointerUp={() => setDragging(null)}
+                    onPointerUp={(e) => {
+                      try {
+                        e.currentTarget.releasePointerCapture(e.pointerId);
+                      } catch {
+                        // ignore
+                      }
+                      setDragging(null);
+                    }}
                     onPointerMove={(e) => {
                       if (!dragging) return;
                       if (dragging.nodeId !== n.id) return;
@@ -709,10 +745,9 @@ export default function WorkflowsEditorClient({
           </div>
         )}
 
-        <div className="w-[360px] shrink-0 overflow-auto rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/20 p-3">
-          <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Workflow</div>
-
-          {parsed.wf ? (
+        <div className="w-[380px] shrink-0 overflow-auto p-3 text-sm">
+          <div className="space-y-3">
+            {parsed.wf ? (
             (() => {
               const wf = parsed.wf;
               const tz = String(wf.timezone ?? "").trim() || "UTC";
@@ -730,23 +765,28 @@ export default function WorkflowsEditorClient({
               ];
 
               return (
-                <div className="mt-2 space-y-4">
-                  <label className="block">
-                    <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">timezone</div>
-                    <input
-                      value={tz}
-                      onChange={(e) => {
-                        const nextTz = String(e.target.value || "").trim() || "UTC";
-                        setWorkflow({ ...wf, timezone: nextTz });
-                      }}
-                      className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-xs text-[color:var(--ck-text-primary)]"
-                      placeholder="America/New_York"
-                    />
-                  </label>
+                <div className="space-y-3">
+                  <details open className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15">
+                    <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)]">Workflow</summary>
+                    <div className="px-3 pb-3">
+                      <label className="block">
+                        <div className="text-[11px] font-medium text-[color:var(--ck-text-tertiary)]">Timezone</div>
+                        <input
+                          value={tz}
+                          onChange={(e) => {
+                            const nextTz = String(e.target.value || "").trim() || "UTC";
+                            setWorkflow({ ...wf, timezone: nextTz });
+                          }}
+                          className="mt-1 w-full rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 px-2 py-1 text-sm text-[color:var(--ck-text-primary)]"
+                          placeholder="America/New_York"
+                        />
+                      </label>
+                    </div>
+                  </details>
 
-                  <div className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
-                    <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">approval channel (mvp)</div>
-                    <div className="mt-2 space-y-2">
+                  <details open className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15">
+                    <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)]">Approval Channel</summary>
+                    <div className="px-3 pb-3 space-y-2">
                       <label className="block">
                         <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">provider</div>
                         <input
@@ -776,9 +816,11 @@ export default function WorkflowsEditorClient({
                         </div>
                       </label>
                     </div>
-                  </div>
+                  </details>
 
-                  <div>
+                  <details open className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15">
+                    <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)]">Triggers</summary>
+                    <div className="px-3 pb-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-[10px] uppercase tracking-wide text-[color:var(--ck-text-tertiary)]">triggers</div>
                       <button
@@ -930,9 +972,12 @@ export default function WorkflowsEditorClient({
                         <div className="text-xs text-[color:var(--ck-text-secondary)]">No triggers yet.</div>
                       )}
                     </div>
-                  </div>
+                    </div>
+                  </details>
 
-                  <div className="border-t border-white/10 pt-3">
+                  <details open className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/15">
+                    <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)]">Runs</summary>
+                    <div className="px-3 pb-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Runs (history)</div>
                       <button
@@ -1022,8 +1067,9 @@ export default function WorkflowsEditorClient({
                       )}
                     </div>
 
-                    <div className="mt-4 border-t border-white/10 pt-3">
-                      <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Nodes</div>
+                    <details open className="mt-3 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/10">
+                      <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)]">Nodes</summary>
+                      <div className="px-3 pb-3">
 
                       <div className="mt-2 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
                         <div className="grid grid-cols-1 gap-2">
@@ -1114,9 +1160,11 @@ export default function WorkflowsEditorClient({
                         })}
                       </div>
                     </div>
+                    </details>
 
-                    <div className="mt-4 border-t border-white/10 pt-3">
-                      <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Edges</div>
+                    <details open className="mt-3 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/10">
+                      <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)]">Edges</summary>
+                      <div className="px-3 pb-3">
 
                       <div className="mt-2 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/25 p-2">
                         <div className="grid grid-cols-1 gap-2">
@@ -1210,10 +1258,12 @@ export default function WorkflowsEditorClient({
                         )}
                       </div>
                     </div>
+                    </details>
 
-                    <div className="mt-4 border-t border-white/10 pt-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-xs font-medium text-[color:var(--ck-text-secondary)]">Node inspector</div>
+                    <details open className="mt-3 rounded-[var(--ck-radius-sm)] border border-white/10 bg-black/10">
+                      <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)]">Node inspector</summary>
+                      <div className="px-3 pb-3">
+                        <div className="flex items-center justify-between gap-2">
                         {selectedNodeId ? (
                           <button
                             type="button"
@@ -1318,11 +1368,14 @@ export default function WorkflowsEditorClient({
                         <div className="mt-2 text-sm text-[color:var(--ck-text-secondary)]">Select a node.</div>
                       )}
                     </div>
+                    </details>
                   </div>
+                  </details>
                 </div>
               );
             })()
           ) : null}
+          </div>
         </div>
       </div>
     </div>
