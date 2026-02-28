@@ -32,6 +32,15 @@ export default async function WorkflowsPage({
             Create and edit workflow definitions for this team.
           </p>
         </div>
+
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/teams/${encodeURIComponent(teamId)}/runs`}
+            className="rounded-[var(--ck-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-[color:var(--ck-text-primary)] hover:bg-white/10"
+          >
+            View runs
+          </Link>
+        </div>
       </div>
 
       <WorkflowsClient teamId={teamId} />
