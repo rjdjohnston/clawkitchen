@@ -1,16 +1,14 @@
 import { getTicketMarkdown } from "@/lib/tickets";
 import { TicketDetailClient } from "@/app/tickets/TicketDetailClient";
 
-// Ticket detail should always reflect current stage/file; do not cache.
 export const dynamic = "force-dynamic";
 
-export default async function TicketDetailPage({
+export default async function TeamTicketDetailPage({
   params,
 }: {
-  params: Promise<{ ticket: string }>;
+  params: Promise<{ teamId: string; ticket: string }>;
 }) {
-  const { ticket } = await params;
-  const teamId = "development-team";
+  const { teamId, ticket } = await params;
   const data = await getTicketMarkdown(teamId, ticket);
 
   if (!data) {
@@ -25,6 +23,12 @@ export default async function TicketDetailPage({
   }
 
   return (
-    <TicketDetailClient teamId={teamId} ticketId={data.id} file={data.file} markdown={data.markdown} />
+    <TicketDetailClient
+      teamId={teamId}
+      ticketId={data.id}
+      file={data.file}
+      markdown={data.markdown}
+      backHref={`/teams/${encodeURIComponent(teamId)}/tickets`}
+    />
   );
 }
