@@ -186,6 +186,8 @@ export function CreateCustomTeamModal({
 
     let cancelled = false;
     const t = setTimeout(async () => {
+      const baseRecipeId = teamIdTrimmed.endsWith("-team") ? teamIdTrimmed.slice(0, -"-team".length) : teamIdTrimmed;
+
       const res = await fetchJsonWithStatus<{
         ok?: boolean;
         error?: string;
@@ -196,7 +198,7 @@ export function CreateCustomTeamModal({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           dryRun: true,
-          recipeId: teamIdTrimmed,
+          recipeId: baseRecipeId,
           teamId: teamIdTrimmed,
           roles: roles.map((r) => ({ roleId: r.roleId, displayName: r.displayName })),
         }),

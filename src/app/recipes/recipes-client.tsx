@@ -266,6 +266,16 @@ export default function RecipesClient({
     return result ?? false;
   }
 
+  async function attachTeamMeta(teamId: string, recipeId: string, recipeName: string) {
+    const res = await fetchJsonWithStatus<{ ok?: boolean; error?: string }>("/api/teams/meta", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ teamId, recipeId, recipeName }),
+    });
+    if (!res.ok) throw new Error(res.error);
+    if (!res.data.ok) throw new Error(res.data.error || "Failed to attach team meta");
+  }
+
   function validateTeamIdForCreate(recipe: { id: string } | null, teamId: string): string | null {
     if (!recipe) return null;
     const t = teamId.trim();
@@ -433,6 +443,11 @@ export default function RecipesClient({
       setCreateCustomTeamError("Team id is required.");
       return;
     }
+    const recipeId = teamId.endsWith("-team") ? teamId.slice(0, -"-team".length) : teamId;
+    if (!recipeId) {
+      setCreateCustomTeamError("Team id is invalid.");
+      return;
+    }
     if (customTeamRoles.length < 1) {
       setCreateCustomTeamError("Select at least one agent.");
       return;
@@ -448,7 +463,7 @@ export default function RecipesClient({
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            recipeId: teamId,
+            recipeId,
             teamId,
             roles: customTeamRoles.map((r) => ({ roleId: r.roleId, displayName: r.displayName })),
           }),
@@ -465,7 +480,7 @@ export default function RecipesClient({
 
       await scaffoldWithOverlay({
         kind: "team",
-        recipeId: teamId,
+        recipeId,
         teamId,
         cronInstallChoice: "no",
         setBusy: setCreateCustomTeamBusy,
@@ -475,7 +490,12 @@ export default function RecipesClient({
         setOverlayStep,
         successMessage: `Created team: ${teamId}`,
         navigateTo: `/teams/${encodeURIComponent(teamId)}`,
-        waitBeforeNavigate: () => waitForTeamPageReady(teamId, { timeoutMs: 60_000 }),
+        waitBeforeNavigate: async () => {
+          // Some scaffold paths may not persist team.json (meta) immediately.
+          // Ensure it exists so the team editor loads reliably.
+          await attachTeamMeta(teamId, recipeId, "Custom Team");
+          await waitForTeamPageReady(teamId, { timeoutMs: 60_000 });
+        },
       });
     } catch (e: unknown) {
       setCreateCustomTeamBusy(false);
