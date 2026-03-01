@@ -10,8 +10,15 @@ describe("api tickets move route", () => {
     vi.mocked(runOpenClaw).mockReset();
   });
 
+  it("returns 400 when teamId missing", async () => {
+    const res = await POST(new Request("https://test", { method: "POST", body: JSON.stringify({ ticket: "T-1", to: "done" }) }));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe("Missing teamId");
+  });
+
   it("returns 400 when ticket missing", async () => {
-    const res = await POST(new Request("https://test", { method: "POST", body: JSON.stringify({}) }));
+    const res = await POST(new Request("https://test", { method: "POST", body: JSON.stringify({ teamId: "dev" }) }));
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error).toBe("Missing ticket");
@@ -21,8 +28,8 @@ describe("api tickets move route", () => {
     const res = await POST(
       new Request("https://test", {
         method: "POST",
-        body: JSON.stringify({ ticket: "T-1", to: "invalid" }),
-      })
+        body: JSON.stringify({ teamId: "dev", ticket: "T-1", to: "invalid" }),
+      }),
     );
     expect(res.status).toBe(400);
     const json = await res.json();
@@ -34,14 +41,14 @@ describe("api tickets move route", () => {
     const res = await POST(
       new Request("https://test", {
         method: "POST",
-        body: JSON.stringify({ ticket: "T-1", to: "in-progress" }),
-      })
+        body: JSON.stringify({ teamId: "dev", ticket: "T-1", to: "in-progress" }),
+      }),
     );
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.ok).toBe(true);
     expect(runOpenClaw).toHaveBeenCalledWith(
-      expect.arrayContaining(["recipes", "move-ticket", "--ticket", "T-1", "--to", "in-progress"])
+      expect.arrayContaining(["recipes", "move-ticket", "--team-id", "dev", "--ticket", "T-1", "--to", "in-progress"]),
     );
   });
 
@@ -50,8 +57,8 @@ describe("api tickets move route", () => {
     const res = await POST(
       new Request("https://test", {
         method: "POST",
-        body: JSON.stringify({ ticket: "T-1", to: "done" }),
-      })
+        body: JSON.stringify({ teamId: "dev", ticket: "T-1", to: "done" }),
+      }),
     );
     expect(res.status).toBe(500);
     const json = await res.json();

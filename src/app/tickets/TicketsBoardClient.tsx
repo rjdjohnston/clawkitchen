@@ -44,7 +44,7 @@ function formatAge(hours: number) {
   return `${Math.round(hours / 24)}d`;
 }
 
-export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
+export function TicketsBoardClient({ tickets, teamId }: { tickets: TicketSummary[]; teamId: string | null }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +114,7 @@ export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
     await fetchJson("/api/tickets/move", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ticket: ticket.id, to }),
+      body: JSON.stringify({ teamId: ticket.teamId, ticket: ticket.id, to }),
     });
   }
 
@@ -201,6 +201,8 @@ export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
                     {String(t.number).padStart(4, "0")} — {t.title}
                   </a>
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[color:var(--ck-text-secondary)]">
+                    <span className="rounded bg-white/5 px-1.5 py-0.5">{t.teamId}</span>
+                    <span>·</span>
                     <span>{t.owner ? `Owner: ${t.owner}` : "Owner: —"}</span>
                     <span>·</span>
                     <span>Age: {formatAge(t.ageHours)}</span>
@@ -234,7 +236,16 @@ export function TicketsBoardClient({ tickets }: { tickets: TicketSummary[] }) {
       </div>
 
       <p className="text-xs text-[color:var(--ck-text-tertiary)]">
-        Source of truth: development-team markdown tickets (via openclaw recipes move-ticket).
+        Source of truth: <code>workspace-&lt;teamId&gt;</code> markdown tickets (via openclaw recipes move-ticket).{" "}
+        {teamId ? (
+          <>
+            Viewing: <span className="font-medium text-[color:var(--ck-text-secondary)]">{teamId}</span>
+          </>
+        ) : (
+          <>
+            Viewing: <span className="font-medium text-[color:var(--ck-text-secondary)]">all</span>
+          </>
+        )}
       </p>
 
       {confirmMove ? (

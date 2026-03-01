@@ -19,10 +19,11 @@ vi.mock("node:fs/promises", () => ({
 describe("tickets", () => {
   describe("stageDir", () => {
     it("maps each stage to correct path", () => {
-      expect(stageDir("backlog")).toContain("work/backlog");
-      expect(stageDir("in-progress")).toContain("work/in-progress");
-      expect(stageDir("testing")).toContain("work/testing");
-      expect(stageDir("done")).toContain("work/done");
+      const teamDir = "/home/x/.openclaw/workspace-dev";
+      expect(stageDir("backlog", teamDir)).toContain("work/backlog");
+      expect(stageDir("in-progress", teamDir)).toContain("work/in-progress");
+      expect(stageDir("testing", teamDir)).toContain("work/testing");
+      expect(stageDir("done", teamDir)).toContain("work/done");
     });
   });
 
@@ -81,7 +82,7 @@ describe("tickets", () => {
         mtimeMs: new Date("2026-01-15T10:00:00Z").getTime(),
       } as ReturnType<typeof fs.stat> extends Promise<infer T> ? T : never);
 
-      const result = await listTickets();
+      const result = await listTickets({ teamId: "dev" });
       expect(result).toHaveLength(1);
       expect(result[0].number).toBe(33);
       expect(result[0].id).toBe("0033-fix-login");
@@ -97,7 +98,7 @@ describe("tickets", () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
-      const result = await listTickets();
+      const result = await listTickets({ teamId: "dev" });
       expect(result).toEqual([]);
     });
 
@@ -114,7 +115,7 @@ describe("tickets", () => {
         mtimeMs: Date.now(),
       } as ReturnType<typeof fs.stat> extends Promise<infer T> ? T : never);
 
-      const result = await listTickets();
+      const result = await listTickets({ teamId: "dev" });
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("0033-a");
     });
@@ -137,21 +138,21 @@ describe("tickets", () => {
     });
 
     it("finds by id and returns markdown", async () => {
-      const result = await getTicketMarkdown("0033-fix");
+      const result = await getTicketMarkdown("0033-fix", { teamId: "dev" });
       expect(result).not.toBeNull();
       expect(result!.id).toBe("0033-fix");
       expect(result!.markdown).toContain("Fix it");
     });
 
     it("finds by number", async () => {
-      const result = await getTicketMarkdown("33");
+      const result = await getTicketMarkdown("33", { teamId: "dev" });
       expect(result).not.toBeNull();
       expect(result!.id).toBe("0033-fix");
     });
 
     it("returns null when not found", async () => {
       vi.mocked(fs.readdir).mockReset().mockResolvedValue([]);
-      const result = await getTicketMarkdown("9999");
+      const result = await getTicketMarkdown("9999", { teamId: "dev" });
       expect(result).toBeNull();
     });
   });
