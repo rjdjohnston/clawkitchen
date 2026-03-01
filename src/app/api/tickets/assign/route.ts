@@ -1,12 +1,40 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { getTicketByIdOrNumber, listTickets, stageDir, type TicketStage } from "@/lib/tickets";
+import { getTeamWorkspaceDir, getTicketByIdOrNumber, listTickets, stageDir, type TicketStage } from "@/lib/tickets";
 
-function desiredStageForAssignee(assignee: string | null): TicketStage {
-  if (!assignee) return "backlog";
-  if (assignee === "test" || assignee === "qa") return "testing";
-  return "in-progress";
+type TicketFlowConfig = {
+  laneByOwner?: Record<string, TicketStage>;
+  defaultLane?: TicketStage;
+};
+
+async function loadTicketFlowConfig(teamDir: string): Promise<TicketFlowConfig | null> {
+  const p = path.join(teamDir, "shared-context", "ticket-flow.json");
+  try {
+    const raw = await fs.readFile(p, "utf8");
+    const parsed = JSON.parse(raw) as TicketFlowConfig;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function desiredStageForAssignee(opts: {
+  teamDir: string;
+  assignee: string | null;
+  currentStage: TicketStage;
+}): Promise<TicketStage> {
+  const config = await loadTicketFlowConfig(opts.teamDir);
+  if (!config) return opts.currentStage;
+
+  const key = (opts.assignee ?? "").trim();
+  if (key && config.laneByOwner && typeof config.laneByOwner[key] === "string") {
+    return config.laneByOwner[key] as TicketStage;
+  }
+
+  if (config.defaultLane) return config.defaultLane;
+  return opts.currentStage;
 }
 
 function upsertField(md: string, field: string, value: string) {
@@ -41,7 +69,7 @@ export async function POST(req: Request) {
   }
 
   const assignee = body.assignee.trim();
-  const nextStage = desiredStageForAssignee(assignee);
+  const nextStage = await desiredStageForAssignee({ teamDir: getTeamWorkspaceDir(), assignee, currentStage: ticket.stage });
 
   const currentMd = await fs.readFile(ticket.file, "utf8");
   let updatedMd = upsertField(currentMd, "Owner", assignee);
