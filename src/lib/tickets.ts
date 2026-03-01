@@ -14,16 +14,31 @@ export interface TicketSummary {
   ageHours: number;
 }
 
-const TEAM_WORKSPACE = "/home/control/.openclaw/workspace-development-team";
+import os from "node:os";
 
-export function stageDir(stage: TicketStage) {
+/**
+ * TEMP/MVP:
+ * - Prefer CK_TEAM_WORKSPACE_DIR (no hardcoding).
+ * - Fallback to ~/.openclaw/workspace-development-team for backwards compatibility.
+ *
+ * NOTE(#0116): ticket APIs should become fully team-scoped via global team context.
+ */
+export function getTeamWorkspaceDir(): string {
+  const ws = process.env.CK_TEAM_WORKSPACE_DIR;
+  if (ws) return ws;
+
+  const home = os.homedir();
+  return path.join(home, ".openclaw", "workspace-development-team");
+}
+
+export function stageDir(stage: TicketStage, teamDir: string = getTeamWorkspaceDir()) {
   const map: Record<TicketStage, string> = {
     backlog: "work/backlog",
     "in-progress": "work/in-progress",
     testing: "work/testing",
     done: "work/done",
   };
-  return path.join(TEAM_WORKSPACE, map[stage]);
+  return path.join(teamDir, map[stage]);
 }
 
 export function parseTitle(md: string) {
@@ -77,14 +92,14 @@ export function parseNumberFromFilename(filename: string): number | null {
   return Number(m[1]);
 }
 
-export async function listTickets(): Promise<TicketSummary[]> {
+export async function listTickets(teamDir: string = getTeamWorkspaceDir()): Promise<TicketSummary[]> {
   const stages: TicketStage[] = ["backlog", "in-progress", "testing", "done"];
   const all: TicketSummary[] = [];
 
   for (const stage of stages) {
     let files: string[] = [];
     try {
-      files = await fs.readdir(stageDir(stage));
+      files = await fs.readdir(stageDir(stage, teamDir));
     } catch {
       files = [];
     }
@@ -94,7 +109,7 @@ export async function listTickets(): Promise<TicketSummary[]> {
       const number = parseNumberFromFilename(f);
       if (number == null) continue;
 
-      const file = path.join(stageDir(stage), f);
+      const file = path.join(stageDir(stage, teamDir), f);
       const [md, stat] = await Promise.all([fs.readFile(file, "utf8"), fs.stat(file)]);
 
       const title = parseTitle(md);
@@ -119,8 +134,8 @@ export async function listTickets(): Promise<TicketSummary[]> {
   return all;
 }
 
-export async function getTicketMarkdown(ticketIdOrNumber: string): Promise<{ id: string; file: string; markdown: string } | null> {
-  const tickets = await listTickets();
+export async function getTicketByIdOrNumber(ticketIdOrNumber: string, teamDir: string = getTeamWorkspaceDir()): Promise<TicketSummary | null> {
+  const tickets = await listTickets(teamDir);
   const normalized = ticketIdOrNumber.trim();
 
   const byNumber = normalized.match(/^\d+$/)
@@ -129,12 +144,21 @@ export async function getTicketMarkdown(ticketIdOrNumber: string): Promise<{ id:
 
   const byId = tickets.find((t) => t.id === normalized);
 
-  const hit = byId ?? byNumber;
+  return byId ?? byNumber ?? null;
+}
+
+export async function getTicketMarkdown(
+  ticketIdOrNumber: string,
+  teamDir: string = getTeamWorkspaceDir(),
+): Promise<{ id: string; file: string; markdown: string; owner: string | null; stage: TicketStage } | null> {
+  const hit = await getTicketByIdOrNumber(ticketIdOrNumber, teamDir);
   if (!hit) return null;
 
   return {
     id: hit.id,
     file: hit.file,
     markdown: await fs.readFile(hit.file, "utf8"),
+    owner: hit.owner,
+    stage: hit.stage,
   };
 }
