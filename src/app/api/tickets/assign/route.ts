@@ -25,50 +25,6 @@ async function ensureDir(p: string) {
   await fs.mkdir(p, { recursive: true });
 }
 
-import { getTeamWorkspaceDir } from "@/lib/tickets";
-
-async function archiveOtherAssignmentStubs(num: number, keepBasename: string) {
-  const assignmentsDir = path.join(getTeamWorkspaceDir(), "work/assignments");
-  const archiveDir = path.join(assignmentsDir, "archive");
-  await ensureDir(archiveDir);
-
-  const prefix = String(num).padStart(4, "0") + "-assigned-";
-
-  let entries: string[] = [];
-  try {
-    entries = await fs.readdir(assignmentsDir);
-  } catch {
-    entries = [];
-  }
-
-  for (const e of entries) {
-    if (!e.startsWith(prefix)) continue;
-    if (e === keepBasename) continue;
-    if (!e.endsWith(".md")) continue;
-
-    const from = path.join(assignmentsDir, e);
-    const to = path.join(archiveDir, e);
-    try {
-      await fs.rename(from, to);
-    } catch {
-      // ignore
-    }
-  }
-}
-
-async function writeAssignmentStub({ num, assignee, ticketPath }: { num: number; assignee: string; ticketPath: string }) {
-  const assignmentsDir = path.join(getTeamWorkspaceDir(), "work/assignments");
-  await ensureDir(assignmentsDir);
-
-  const bn = `${String(num).padStart(4, "0")}-assigned-${assignee}.md`;
-  const p = path.join(assignmentsDir, bn);
-
-  const content = `# ${String(num).padStart(4, "0")} — assigned to ${assignee}\n\n## Ticket\n${ticketPath}\n\n## Notes\n- Assigned via ClawKitchen UI.\n`;
-  await fs.writeFile(p, content, "utf8");
-
-  await archiveOtherAssignmentStubs(num, bn);
-}
-
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as null | {
     ticket: string;
@@ -103,7 +59,7 @@ export async function POST(req: Request) {
 
   await fs.writeFile(nextPath, updatedMd, "utf8");
 
-  await writeAssignmentStub({ num: ticket.number, assignee, ticketPath: path.relative(getTeamWorkspaceDir(), nextPath) });
+  // Assignment stubs are deprecated; do not create/update work/assignments/*.md.
 
   const refreshed = (await listTickets()).find((t) => t.number === ticket.number);
   return NextResponse.json({ ok: true, ticket: refreshed ?? null });
