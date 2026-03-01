@@ -130,7 +130,28 @@ Authentication:
   - password: `<token>`
 
 Safety rule:
-- If `host` is not localhost, `authToken` is required.
+- If `host` is not localhost, `authToken` is required (unless you explicitly set `KITCHEN_AUTH_MODE=off`, which is not recommended).
+
+### Optional: allow localhost access without Basic Auth (for headless QA)
+
+If you bind Kitchen to a non-localhost host (Tailscale/LAN) you may still want **local/headless** access without dealing with Basic Auth.
+
+Set:
+- `KITCHEN_AUTH_MODE=local`
+
+Behavior:
+- `on` (default): Basic Auth required for all requests when `host` is not localhost.
+- `local`: Basic Auth is **skipped only for loopback requests** (`127.0.0.1` / `::1`). Remote/Tailscale requests still require Basic Auth.
+- `off`: disables Basic Auth entirely (**dangerous**, CI/dev only).
+
+How to set it depends on how you run the OpenClaw gateway. If you're using the systemd user service (`openclaw-gateway.service`), add a drop-in:
+
+```ini
+[Service]
+Environment=KITCHEN_AUTH_MODE=local
+```
+
+Then restart the gateway.
 
 ---
 
