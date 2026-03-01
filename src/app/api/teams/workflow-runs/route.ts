@@ -57,6 +57,26 @@ function formatApprovalPacketMessage(workflow: WorkflowFileV1, run: WorkflowRunF
   return body;
 }
 
+function applyTemplate(template: string, vars: Record<string, string>) {
+  let out = template;
+  for (const [k, v] of Object.entries(vars)) {
+    out = out.replaceAll(`{{${k}}}`, v);
+  }
+  return out;
+}
+
+function getApprovalSendConfig(workflow: WorkflowFileV1, approvalNodeId: string) {
+  const meta = isRecord(workflow.meta) ? workflow.meta : {};
+  const node = Array.isArray(workflow.nodes) ? workflow.nodes.find((n) => n.id === approvalNodeId) : undefined;
+  const cfg = node && isRecord(node.config) ? node.config : {};
+
+  const provider = String(cfg.provider ?? cfg.channel ?? meta.approvalProvider ?? "telegram").trim() || "telegram";
+  const target = String(cfg.target ?? cfg.chatId ?? meta.approvalTarget ?? "").trim();
+  const messageTemplate = String(cfg.messageTemplate ?? cfg.template ?? "").trim();
+
+  return { provider, target, messageTemplate };
+}
+
 async function maybeSendApprovalRequest({
   teamId,
   workflow,
@@ -68,12 +88,18 @@ async function maybeSendApprovalRequest({
   run: WorkflowRunFileV1;
   approvalNodeId: string;
 }) {
-  const meta = isRecord(workflow.meta) ? workflow.meta : {};
-  const provider = String(meta.approvalProvider ?? "telegram").trim() || "telegram";
-  const target = String(meta.approvalTarget ?? "").trim();
+  const { provider, target, messageTemplate } = getApprovalSendConfig(workflow, approvalNodeId);
   if (!target) return;
 
-  const message = formatApprovalPacketMessage(workflow, run, approvalNodeId);
+  const base = formatApprovalPacketMessage(workflow, run, approvalNodeId);
+  const message = messageTemplate
+    ? `${applyTemplate(messageTemplate, {
+        workflowName: workflow.name || workflow.id,
+        workflowId: workflow.id,
+        runId: run.id,
+        nodeId: approvalNodeId,
+      })}\n\n${base}`
+    : base;
 
   // Best-effort: message delivery failures should not block file-first persistence.
   await toolsInvoke({
@@ -106,6 +132,7 @@ export async function POST(req: Request) {
   const action = String(o.action ?? "").trim();
   const runIdFromBody = String(o.runId ?? "").trim();
   const note = typeof o.note === "string" ? o.note : undefined;
+  const decidedBy = typeof o.decidedBy === "string" ? o.decidedBy : undefined;
 
   if (!teamId) return NextResponse.json({ ok: false, error: "teamId is required" }, { status: 400 });
   if (!workflowId) return NextResponse.json({ ok: false, error: "workflowId is required" }, { status: 400 });
@@ -144,6 +171,7 @@ export async function POST(req: Request) {
                   ...existingOutput,
                   decision: nextState,
                   note,
+                  decidedBy,
                 },
               };
             }
@@ -183,6 +211,7 @@ export async function POST(req: Request) {
           requestedAt: run.approval?.requestedAt,
           decidedAt: nextState === "changes_requested" ? undefined : decidedAt,
           note,
+          decidedBy,
         },
         nodes: nextNodes,
       };
@@ -360,9 +389,7 @@ export async function POST(req: Request) {
             };
 
             if (approvalNodeId) {
-              const meta = isRecord(wf.meta) ? wf.meta : {};
-              const provider = String(meta.approvalProvider ?? "telegram").trim() || "telegram";
-              const target = String(meta.approvalTarget ?? "").trim();
+              const { provider, target } = getApprovalSendConfig(wf, approvalNodeId);
 
               if (target) {
                 try {
