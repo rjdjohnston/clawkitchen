@@ -14,7 +14,22 @@ export interface TicketSummary {
   ageHours: number;
 }
 
-const TEAM_WORKSPACE = "/home/control/.openclaw/workspace-development-team";
+import os from "node:os";
+
+/**
+ * TEMP/MVP:
+ * - Prefer CK_TEAM_WORKSPACE_DIR (no hardcoding).
+ * - Fallback to ~/.openclaw/workspace-development-team for backwards compatibility.
+ *
+ * NOTE(#0116): ticket APIs should become fully team-scoped via global team context.
+ */
+export function getTeamWorkspaceDir(): string {
+  const ws = process.env.CK_TEAM_WORKSPACE_DIR;
+  if (ws) return ws;
+
+  const home = os.homedir();
+  return path.join(home, ".openclaw", "workspace-development-team");
+}
 
 export function stageDir(stage: TicketStage) {
   const map: Record<TicketStage, string> = {
@@ -23,7 +38,7 @@ export function stageDir(stage: TicketStage) {
     testing: "work/testing",
     done: "work/done",
   };
-  return path.join(TEAM_WORKSPACE, map[stage]);
+  return path.join(getTeamWorkspaceDir(), map[stage]);
 }
 
 export function parseTitle(md: string) {

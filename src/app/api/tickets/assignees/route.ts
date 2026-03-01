@@ -2,12 +2,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 
-const TEAM_WORKSPACE = "/home/control/.openclaw/workspace-development-team";
+import { getTeamWorkspaceDir } from "@/lib/tickets";
 
 export async function GET() {
   // MVP: in development-team, treat role directories as available agentIds.
   // Future: should come from OpenClaw team config (bindings/agents) and be team-scoped.
-  const rolesDir = path.join(TEAM_WORKSPACE, "roles");
+  const rolesDir = path.join(getTeamWorkspaceDir(), "roles");
 
   let entries: string[] = [];
   try {

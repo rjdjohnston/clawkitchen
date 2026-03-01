@@ -25,8 +25,10 @@ async function ensureDir(p: string) {
   await fs.mkdir(p, { recursive: true });
 }
 
+import { getTeamWorkspaceDir } from "@/lib/tickets";
+
 async function archiveOtherAssignmentStubs(num: number, keepBasename: string) {
-  const assignmentsDir = path.join("/home/control/.openclaw/workspace-development-team", "work/assignments");
+  const assignmentsDir = path.join(getTeamWorkspaceDir(), "work/assignments");
   const archiveDir = path.join(assignmentsDir, "archive");
   await ensureDir(archiveDir);
 
@@ -55,7 +57,7 @@ async function archiveOtherAssignmentStubs(num: number, keepBasename: string) {
 }
 
 async function writeAssignmentStub({ num, assignee, ticketPath }: { num: number; assignee: string; ticketPath: string }) {
-  const assignmentsDir = path.join("/home/control/.openclaw/workspace-development-team", "work/assignments");
+  const assignmentsDir = path.join(getTeamWorkspaceDir(), "work/assignments");
   await ensureDir(assignmentsDir);
 
   const bn = `${String(num).padStart(4, "0")}-assigned-${assignee}.md`;
@@ -101,7 +103,7 @@ export async function POST(req: Request) {
 
   await fs.writeFile(nextPath, updatedMd, "utf8");
 
-  await writeAssignmentStub({ num: ticket.number, assignee, ticketPath: path.relative("/home/control/.openclaw/workspace-development-team", nextPath) });
+  await writeAssignmentStub({ num: ticket.number, assignee, ticketPath: path.relative(getTeamWorkspaceDir(), nextPath) });
 
   const refreshed = (await listTickets()).find((t) => t.number === ticket.number);
   return NextResponse.json({ ok: true, ticket: refreshed ?? null });
