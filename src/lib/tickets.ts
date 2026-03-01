@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 export type TicketStage = "backlog" | "in-progress" | "testing" | "done";
@@ -15,7 +16,7 @@ export interface TicketSummary {
 }
 
 function assertSafeTeamId(teamId: string) {
-  // Keep conservative: matches OpenClaw team ids like "development-team".
+  // Conservative: matches OpenClaw team ids like "development-team".
   if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(teamId)) {
     throw new Error(`Invalid teamId "${teamId}"`);
   }
@@ -23,7 +24,7 @@ function assertSafeTeamId(teamId: string) {
 
 export function teamWorkspace(teamId: string) {
   assertSafeTeamId(teamId);
-  return `/home/control/.openclaw/workspace-${teamId}`;
+  return path.join(os.homedir(), ".openclaw", `workspace-${teamId}`);
 }
 
 export function stageDir(stage: TicketStage, teamId = "development-team") {
@@ -76,7 +77,7 @@ export function parseTitle(md: string) {
 }
 
 function parseField(md: string, field: string): string | null {
-  const re = new RegExp(`^${field}:\s*(.*)$`, "mi");
+  const re = new RegExp(`^${field}:\\s*(.*)$`, "mi");
   const m = md.match(re);
   return m?.[1]?.trim() || null;
 }
@@ -133,18 +134,15 @@ export async function resolveTicket(teamId: string, ticketIdOrNumber: string): P
   const tickets = await listTickets(teamId);
   const normalized = ticketIdOrNumber.trim();
 
-  const byNumber = normalized.match(/^\d+$/)
-    ? tickets.find((t) => t.number === Number(normalized))
-    : null;
-
+  const byNumber = normalized.match(/^\d+$/) ? tickets.find((t) => t.number === Number(normalized)) : null;
   const byId = tickets.find((t) => t.id === normalized);
   return byId ?? byNumber ?? null;
 }
 
 export async function getTicketMarkdown(
   teamId: string,
-  ticketIdOrNumber: string
-): Promise<{ id: string; file: string; markdown: string } | null> {
+  ticketIdOrNumber: string,
+): Promise<{ id: string; file: string; markdown: string; owner: string | null; stage: TicketStage } | null> {
   const hit = await resolveTicket(teamId, ticketIdOrNumber);
   if (!hit) return null;
 
@@ -152,5 +150,7 @@ export async function getTicketMarkdown(
     id: hit.id,
     file: hit.file,
     markdown: await fs.readFile(hit.file, "utf8"),
+    owner: hit.owner,
+    stage: hit.stage,
   };
 }

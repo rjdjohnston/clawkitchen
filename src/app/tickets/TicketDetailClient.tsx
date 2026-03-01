@@ -7,6 +7,7 @@ import { useState, useTransition } from "react";
 import { useToast } from "@/components/ToastProvider";
 import { errorMessage } from "@/lib/errors";
 import { fetchJson } from "@/lib/fetch-json";
+import { TicketAssignControl } from "@/app/tickets/[ticket]/TicketAssignControl";
 
 export function TicketDetailClient(props: {
   teamId: string;
@@ -14,6 +15,7 @@ export function TicketDetailClient(props: {
   file: string;
   markdown: string;
   backHref?: string;
+  currentOwner?: string | null;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -52,6 +54,10 @@ export function TicketDetailClient(props: {
         <div className="ck-glass border border-[color:var(--ck-border-strong)] p-3 text-sm text-[color:var(--ck-text-primary)]">
           {error}
         </div>
+      ) : null}
+
+      {props.currentOwner !== undefined ? (
+        <TicketAssignControl teamId={props.teamId} ticket={props.ticketId} currentOwner={props.currentOwner ?? null} />
       ) : null}
 
       <div className="ck-glass p-4">

@@ -11,12 +11,42 @@ type KitchenConfig = {
   dev?: boolean;
   host?: string;
   port?: number;
+  /**
+   * Enables HTTP Basic auth when binding to a non-localhost host.
+   * Username is fixed to "kitchen"; password is this token.
+   */
   authToken?: string;
+  /**
+   * Optional, disabled-by-default bypass intended ONLY for automated/headless QA.
+   * If set, a request may present ?qaToken=... once to receive a short-lived cookie.
+   */
+  qaToken?: string;
 };
+
+type KitchenAuthMode = "on" | "local" | "off";
+
+function parseAuthMode(v: unknown): KitchenAuthMode {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "off") return "off";
+  if (s === "local") return "local";
+  return "on";
+}
 
 function isLocalhost(host: string) {
   const h = (host || "").trim().toLowerCase();
   return h === "127.0.0.1" || h === "localhost" || h === "::1";
+}
+
+function isLoopbackRemoteAddress(addr: string | undefined | null) {
+  const a = String(addr || "").trim().toLowerCase();
+  if (!a) return false;
+  // Node often reports IPv4-mapped IPv6 addresses.
+  if (a === "::1") return true;
+  if (a.startsWith("::ffff:")) {
+    const v4 = a.slice("::ffff:".length);
+    return v4 === "127.0.0.1";
+  }
+  return a === "127.0.0.1";
 }
 
 function parseBasicAuth(req: http.IncomingMessage) {
@@ -32,6 +62,20 @@ function parseBasicAuth(req: http.IncomingMessage) {
   }
 }
 
+function parseCookies(req: http.IncomingMessage): Record<string, string> {
+  const header = String(req.headers.cookie || "");
+  const out: Record<string, string> = {};
+  for (const part of header.split(";")) {
+    const [kRaw, ...vParts] = part.trim().split("=");
+    if (!kRaw) continue;
+    const k = kRaw.trim();
+    const v = vParts.join("=").trim();
+    if (!k) continue;
+    out[k] = decodeURIComponent(v || "");
+  }
+  return out;
+}
+
 let server: http.Server | null = null;
 let startedAt: string | null = null;
 
@@ -44,9 +88,13 @@ async function startKitchen(api: OpenClawPluginApi, cfg: KitchenConfig) {
   // Dev mode (turbopack) can transiently 404 routes until compilation finishes.
   const dev = cfg.dev === true;
   const authToken = String(cfg.authToken || "");
+  const qaToken = String(cfg.qaToken || "");
+  const authMode = parseAuthMode(process.env.KITCHEN_AUTH_MODE);
 
-  if (!isLocalhost(host) && !authToken.trim()) {
-    throw new Error("Kitchen: authToken is required when binding to a non-localhost host (for Tailscale/remote access).");
+  if (authMode !== "off" && !isLocalhost(host) && !authToken.trim()) {
+    throw new Error(
+      "Kitchen: authToken is required when binding to a non-localhost host (for Tailscale/remote access).",
+    );
   }
 
   const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -67,9 +115,38 @@ async function startKitchen(api: OpenClawPluginApi, cfg: KitchenConfig) {
         return;
       }
 
-      if (!isLocalhost(host) && authToken.trim()) {
+      const shouldProtect = authMode !== "off" && !isLocalhost(host) && authToken.trim();
+      const isLocalRequest = isLoopbackRemoteAddress(req.socket.remoteAddress);
+
+      if (shouldProtect && !(authMode === "local" && isLocalRequest)) {
+        // Optional headless QA bypass: safe-by-default (disabled unless cfg.qaToken is set).
+        // Flow:
+        // - First request: /some/path?qaToken=... (must match cfg.qaToken)
+        // - Server sets an HttpOnly cookie and 302-redirects to the same URL without qaToken.
+        // - Subsequent requests present the cookie.
+        const cookies = parseCookies(req);
+        const hasQaCookie = qaToken.trim() && cookies.kitchenQaToken === qaToken;
+
+        // Note: req.url here is path+query only, so we need a base.
+        const reqUrl = new URL(url, `http://${host}:${port}`);
+        const qpQaToken = String(reqUrl.searchParams.get("qaToken") || "");
+
+        if (!hasQaCookie && qaToken.trim() && qpQaToken && qpQaToken === qaToken) {
+          // Set cookie (15 minutes) and redirect to clear token from URL.
+          res.statusCode = 302;
+          res.setHeader(
+            "set-cookie",
+            `kitchenQaToken=${encodeURIComponent(qaToken)}; HttpOnly; Path=/; Max-Age=${15 * 60}; SameSite=Lax`,
+          );
+          reqUrl.searchParams.delete("qaToken");
+          res.setHeader("location", reqUrl.pathname + (reqUrl.search ? `?${reqUrl.searchParams.toString()}` : ""));
+          api.logger.warn(`[kitchen] QA token used for ${req.method || "GET"} ${reqUrl.pathname}`);
+          res.end("OK");
+          return;
+        }
+
         const creds = parseBasicAuth(req);
-        const ok = creds && creds.user === "kitchen" && creds.pass === authToken;
+        const ok = hasQaCookie || (creds && creds.user === "kitchen" && creds.pass === authToken);
         if (!ok) {
           res.statusCode = 401;
           res.setHeader("www-authenticate", 'Basic realm="kitchen"');

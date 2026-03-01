@@ -25,6 +25,12 @@ export default async function TicketDetailPage({
   }
 
   return (
-    <TicketDetailClient teamId={teamId} ticketId={data.id} file={data.file} markdown={data.markdown} />
+    <TicketDetailClient
+      teamId={teamId}
+      ticketId={data.id}
+      file={data.file}
+      markdown={data.markdown}
+      currentOwner={data.owner}
+    />
   );
 }
