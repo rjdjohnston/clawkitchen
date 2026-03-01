@@ -20,10 +20,10 @@ describe("tickets", () => {
   describe("stageDir", () => {
     it("maps each stage to correct path", () => {
       const teamDir = "/home/x/.openclaw/workspace-dev";
-      expect(stageDir(teamDir, "backlog")).toContain("work/backlog");
-      expect(stageDir(teamDir, "in-progress")).toContain("work/in-progress");
-      expect(stageDir(teamDir, "testing")).toContain("work/testing");
-      expect(stageDir(teamDir, "done")).toContain("work/done");
+      expect(stageDir("backlog", teamDir)).toContain("work/backlog");
+      expect(stageDir("in-progress", teamDir)).toContain("work/in-progress");
+      expect(stageDir("testing", teamDir)).toContain("work/testing");
+      expect(stageDir("done", teamDir)).toContain("work/done");
     });
   });
 

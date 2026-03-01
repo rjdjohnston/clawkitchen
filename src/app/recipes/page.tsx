@@ -43,7 +43,11 @@ async function getAgents(): Promise<{ agentIds: string[]; error: string | null }
   }
 }
 
-export default async function RecipesPage() {
+export default async function RecipesPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   noStore();
 
   const [{ recipes, error }, { agentIds }] = await Promise.all([getRecipes(), getAgents()]);
@@ -84,6 +88,9 @@ export default async function RecipesPage() {
         customTeamRecipes={customTeamRecipes}
         customAgentRecipes={customAgentRecipes}
         installedAgentIds={agentIds}
+        initialOpenCustomTeam={
+          String(searchParams?.createCustomTeam ?? "") === "1" || String(searchParams?.createCustomTeam ?? "") === "true"
+        }
       />
 
       <p className="mt-10 text-xs text-[color:var(--ck-text-tertiary)]">
