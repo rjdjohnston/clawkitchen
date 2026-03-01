@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export function TicketAssignControl({
+  teamId,
   ticket,
   currentOwner,
 }: {
+  teamId?: string | null;
   ticket: string;
   currentOwner: string | null;
 }) {
@@ -20,7 +22,10 @@ export function TicketAssignControl({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/tickets/assignees", { cache: "no-store" });
+        const url = teamId
+          ? `/api/teams/${encodeURIComponent(teamId)}/tickets/assignees`
+          : "/api/tickets/assignees";
+        const res = await fetch(url, { cache: "no-store" });
         const json = (await res.json()) as { assignees?: string[] };
         if (cancelled) return;
         setAssignees(Array.isArray(json.assignees) ? json.assignees : []);
@@ -44,7 +49,11 @@ export function TicketAssignControl({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/tickets/assign", {
+      const url = teamId
+        ? `/api/teams/${encodeURIComponent(teamId)}/tickets/assign`
+        : "/api/tickets/assign";
+
+      const res = await fetch(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ticket, assignee: selected }),

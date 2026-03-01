@@ -31,14 +31,14 @@ export function getTeamWorkspaceDir(): string {
   return path.join(home, ".openclaw", "workspace-development-team");
 }
 
-export function stageDir(stage: TicketStage) {
+export function stageDir(stage: TicketStage, teamDir: string = getTeamWorkspaceDir()) {
   const map: Record<TicketStage, string> = {
     backlog: "work/backlog",
     "in-progress": "work/in-progress",
     testing: "work/testing",
     done: "work/done",
   };
-  return path.join(getTeamWorkspaceDir(), map[stage]);
+  return path.join(teamDir, map[stage]);
 }
 
 export function parseTitle(md: string) {
@@ -92,14 +92,14 @@ export function parseNumberFromFilename(filename: string): number | null {
   return Number(m[1]);
 }
 
-export async function listTickets(): Promise<TicketSummary[]> {
+export async function listTickets(teamDir: string = getTeamWorkspaceDir()): Promise<TicketSummary[]> {
   const stages: TicketStage[] = ["backlog", "in-progress", "testing", "done"];
   const all: TicketSummary[] = [];
 
   for (const stage of stages) {
     let files: string[] = [];
     try {
-      files = await fs.readdir(stageDir(stage));
+      files = await fs.readdir(stageDir(stage, teamDir));
     } catch {
       files = [];
     }
@@ -109,7 +109,7 @@ export async function listTickets(): Promise<TicketSummary[]> {
       const number = parseNumberFromFilename(f);
       if (number == null) continue;
 
-      const file = path.join(stageDir(stage), f);
+      const file = path.join(stageDir(stage, teamDir), f);
       const [md, stat] = await Promise.all([fs.readFile(file, "utf8"), fs.stat(file)]);
 
       const title = parseTitle(md);
@@ -134,8 +134,8 @@ export async function listTickets(): Promise<TicketSummary[]> {
   return all;
 }
 
-export async function getTicketByIdOrNumber(ticketIdOrNumber: string): Promise<TicketSummary | null> {
-  const tickets = await listTickets();
+export async function getTicketByIdOrNumber(ticketIdOrNumber: string, teamDir: string = getTeamWorkspaceDir()): Promise<TicketSummary | null> {
+  const tickets = await listTickets(teamDir);
   const normalized = ticketIdOrNumber.trim();
 
   const byNumber = normalized.match(/^\d+$/)
@@ -149,8 +149,9 @@ export async function getTicketByIdOrNumber(ticketIdOrNumber: string): Promise<T
 
 export async function getTicketMarkdown(
   ticketIdOrNumber: string,
+  teamDir: string = getTeamWorkspaceDir(),
 ): Promise<{ id: string; file: string; markdown: string; owner: string | null; stage: TicketStage } | null> {
-  const hit = await getTicketByIdOrNumber(ticketIdOrNumber);
+  const hit = await getTicketByIdOrNumber(ticketIdOrNumber, teamDir);
   if (!hit) return null;
 
   return {
