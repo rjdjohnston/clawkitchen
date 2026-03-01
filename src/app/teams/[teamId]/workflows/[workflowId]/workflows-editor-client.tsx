@@ -920,10 +920,15 @@ export default function WorkflowsEditorClient({
               const approvalProvider = String(meta.approvalProvider ?? "telegram").trim() || "telegram";
               const approvalTarget = String(meta.approvalTarget ?? "").trim();
 
+              // Cron schedule suggestions.
+              // Note: dev-team automation defaults should avoid the 02:00–07:00 America/New_York blackout window.
+              // We keep presets in "safe" hours by default.
               const presets = [
                 { label: "(no preset)", expr: "" },
+                { label: "Weekdays 09:00 local", expr: "0 9 * * 1-5" },
                 { label: "Mon/Wed/Fri 09:00 local", expr: "0 9 * * 1,3,5" },
                 { label: "Daily 08:00 local", expr: "0 8 * * *" },
+                { label: "Daily 12:00 local", expr: "0 12 * * *" },
                 { label: "Mon 09:30 local", expr: "30 9 * * 1" },
               ];
 
@@ -1094,7 +1099,6 @@ export default function WorkflowsEditorClient({
                                       value={presets.some((p) => p.expr === expr) ? expr : ""}
                                       onChange={(e) => {
                                         const nextExpr = e.target.value;
-                                        if (!nextExpr) return;
                                         setWorkflow({
                                           ...wf,
                                           triggers: triggers.map((x, idx) => (idx === i && x.kind === "cron" ? { ...x, expr: nextExpr } : x)),
