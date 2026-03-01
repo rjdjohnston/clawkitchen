@@ -23,9 +23,30 @@ type KitchenConfig = {
   qaToken?: string;
 };
 
+type KitchenAuthMode = "on" | "local" | "off";
+
+function parseAuthMode(v: unknown): KitchenAuthMode {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "off") return "off";
+  if (s === "local") return "local";
+  return "on";
+}
+
 function isLocalhost(host: string) {
   const h = (host || "").trim().toLowerCase();
   return h === "127.0.0.1" || h === "localhost" || h === "::1";
+}
+
+function isLoopbackRemoteAddress(addr: string | undefined | null) {
+  const a = String(addr || "").trim().toLowerCase();
+  if (!a) return false;
+  // Node often reports IPv4-mapped IPv6 addresses.
+  if (a === "::1") return true;
+  if (a.startsWith("::ffff:")) {
+    const v4 = a.slice("::ffff:".length);
+    return v4 === "127.0.0.1";
+  }
+  return a === "127.0.0.1";
 }
 
 function parseBasicAuth(req: http.IncomingMessage) {
@@ -68,9 +89,12 @@ async function startKitchen(api: OpenClawPluginApi, cfg: KitchenConfig) {
   const dev = cfg.dev === true;
   const authToken = String(cfg.authToken || "");
   const qaToken = String(cfg.qaToken || "");
+  const authMode = parseAuthMode(process.env.KITCHEN_AUTH_MODE);
 
-  if (!isLocalhost(host) && !authToken.trim()) {
-    throw new Error("Kitchen: authToken is required when binding to a non-localhost host (for Tailscale/remote access).");
+  if (authMode !== "off" && !isLocalhost(host) && !authToken.trim()) {
+    throw new Error(
+      "Kitchen: authToken is required when binding to a non-localhost host (for Tailscale/remote access).",
+    );
   }
 
   const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -91,7 +115,10 @@ async function startKitchen(api: OpenClawPluginApi, cfg: KitchenConfig) {
         return;
       }
 
-      if (!isLocalhost(host) && authToken.trim()) {
+      const shouldProtect = authMode !== "off" && !isLocalhost(host) && authToken.trim();
+      const isLocalRequest = isLoopbackRemoteAddress(req.socket.remoteAddress);
+
+      if (shouldProtect && !(authMode === "local" && isLocalRequest)) {
         // Optional headless QA bypass: safe-by-default (disabled unless cfg.qaToken is set).
         // Flow:
         // - First request: /some/path?qaToken=... (must match cfg.qaToken)
