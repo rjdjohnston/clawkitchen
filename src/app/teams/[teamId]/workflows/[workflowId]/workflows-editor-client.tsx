@@ -1094,7 +1094,6 @@ export default function WorkflowsEditorClient({
                                       value={presets.some((p) => p.expr === expr) ? expr : ""}
                                       onChange={(e) => {
                                         const nextExpr = e.target.value;
-                                        if (!nextExpr) return;
                                         setWorkflow({
                                           ...wf,
                                           triggers: triggers.map((x, idx) => (idx === i && x.kind === "cron" ? { ...x, expr: nextExpr } : x)),
